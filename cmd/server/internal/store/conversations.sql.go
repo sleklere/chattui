@@ -27,3 +27,42 @@ func (q *Queries) GetOrCreateConversation(ctx context.Context, arg GetOrCreateCo
 	err := row.Scan(&i.ID, &i.UserA, &i.UserB)
 	return i, err
 }
+
+const listConversationsByUser = `-- name: ListConversationsByUser :many
+SELECT conversations.id, peer.id as peer_id, peer.username AS peer_username
+FROM conversations
+JOIN users peer ON (CASE WHEN user_a = $1 THEN user_b ELSE user_a END) = peer.id
+WHERE user_a = $1 OR user_b = $1
+ORDER BY conversations.id DESC LIMIT $2
+`
+
+type ListConversationsByUserParams struct {
+	UserID int64
+	Lim    int32
+}
+
+type ListConversationsByUserRow struct {
+	ID           int64
+	PeerID       int64
+	PeerUsername string
+}
+
+func (q *Queries) ListConversationsByUser(ctx context.Context, arg ListConversationsByUserParams) ([]ListConversationsByUserRow, error) {
+	rows, err := q.db.Query(ctx, listConversationsByUser, arg.UserID, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListConversationsByUserRow
+	for rows.Next() {
+		var i ListConversationsByUserRow
+		if err := rows.Scan(&i.ID, &i.PeerID, &i.PeerUsername); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

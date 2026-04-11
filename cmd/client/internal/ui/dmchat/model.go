@@ -119,9 +119,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case historyLoadedMsg:
 		for i := len(msg.messages) - 1; i >= 0; i-- {
 			m2 := msg.messages[i]
+			senderUsername := m.peerUsername
+			if m2.SenderID == m.myUserID {
+				senderUsername = m.myUsername
+			}
 			m.messages = append(m.messages, dmMessage{
 				senderID:       m2.SenderID,
-				senderUsername: m2.SenderUsername,
+				senderUsername: senderUsername,
 				content:        m2.Body,
 				timestamp:      m2.CreatedAt.Format("15:04"),
 			})

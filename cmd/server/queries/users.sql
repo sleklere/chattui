@@ -7,3 +7,8 @@ RETURNING id, username, password, created_at;
 SELECT id, username, password, created_at
 FROM users
 WHERE username = $1;
+
+-- name: GetUserByID :one
+SELECT id, username, created_at
+FROM users
+WHERE id = $1;
