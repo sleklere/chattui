@@ -5,10 +5,9 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"net/http"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/httpx"
+	"github.com/sleklere/realtime-chat/cmd/server/internal/errs"
 	dbstore "github.com/sleklere/realtime-chat/cmd/server/internal/store"
 )
 
@@ -29,7 +28,7 @@ func (s *Service) GetByUsername(ctx context.Context, username string) (dbstore.U
 	user, err := s.store.GetUserByUsername(ctx, username)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return dbstore.User{}, httpx.New(http.StatusNotFound, "not_found", "user not found", err)
+			return dbstore.User{}, errs.ErrNotFound
 		}
 		return dbstore.User{}, err
 	}

@@ -33,7 +33,10 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) error {
 		return httpx.BadRequest("invalid_json", "invalid json", err)
 	}
 
-	authRes, err := h.authSvc.Register(r.Context(), req)
+	result, err := h.authSvc.Register(r.Context(), auth.RegisterInput{
+		Username: req.Username,
+		Password: req.Password,
+	})
 	if err != nil {
 		if errors.Is(err, auth.ErrUsernameTaken) {
 			return httpx.New(http.StatusConflict, "username_taken", "username already in use", err)
@@ -41,10 +44,10 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	return httpx.JSON(w, http.StatusOK, authRes)
+	return httpx.JSON(w, http.StatusOK, authResultToRes(result))
 }
 
-// Login handles user login requests (not yet implemented).
+// Login handles user login requests.
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) error {
 	h.logger.Debug("login handler")
 
@@ -53,10 +56,16 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) error {
 		return httpx.BadRequest("invalid_json", "invalid json", err)
 	}
 
-	authRes, err := h.authSvc.Login(r.Context(), req)
+	result, err := h.authSvc.Login(r.Context(), auth.LoginInput{
+		Username: req.Username,
+		Password: req.Password,
+	})
 	if err != nil {
+		if errors.Is(err, auth.ErrUserNotFound) || errors.Is(err, auth.ErrInvalidCreds) {
+			return httpx.New(http.StatusUnauthorized, "invalid_credentials", "invalid credentials", err)
+		}
 		return err
 	}
 
-	return httpx.JSON(w, http.StatusOK, authRes)
+	return httpx.JSON(w, http.StatusOK, authResultToRes(result))
 }

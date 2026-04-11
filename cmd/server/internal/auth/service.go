@@ -9,11 +9,30 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	reqdto "github.com/sleklere/realtime-chat/cmd/server/internal/api/dto/request"
-	resdto "github.com/sleklere/realtime-chat/cmd/server/internal/api/dto/response"
 	dbstore "github.com/sleklere/realtime-chat/cmd/server/internal/store"
 	"golang.org/x/crypto/bcrypt"
 )
+
+// RegisterInput holds the data needed to register a new user.
+type RegisterInput struct {
+	Username string
+	Password string
+}
+
+// LoginInput holds the data needed to authenticate a user.
+type LoginInput struct {
+	Username string
+	Password string
+}
+
+// AuthResult is returned on successful authentication.
+type AuthResult struct {
+	UserID    int64
+	Username  string
+	CreatedAt time.Time
+	Token     string
+	ExpiresAt int64
+}
 
 // Store defines the persistence methods required for authentication operations.
 type Store interface {
@@ -43,69 +62,60 @@ var (
 )
 
 // Register creates a new user account, hashing the password and checking for duplicates.
-func (s *Service) Register(ctx context.Context, req reqdto.RegisterReq) (resdto.AuthRes, error) {
-	if _, err := s.store.GetUserByUsername(ctx, req.Username); err == nil {
-		return resdto.AuthRes{}, ErrUsernameTaken
+func (s *Service) Register(ctx context.Context, in RegisterInput) (AuthResult, error) {
+	if _, err := s.store.GetUserByUsername(ctx, in.Username); err == nil {
+		return AuthResult{}, ErrUsernameTaken
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
 	if err != nil {
-		return resdto.AuthRes{}, err
+		return AuthResult{}, err
 	}
 
 	u, err := s.store.CreateUser(ctx, dbstore.CreateUserParams{
-		Username: req.Username,
+		Username: in.Username,
 		Password: string(hash),
 	})
 	if err != nil {
-		return resdto.AuthRes{}, err
+		return AuthResult{}, err
 	}
 
 	token, exp, err := s.generateAccessToken(u)
 	if err != nil {
-		return resdto.AuthRes{}, err
+		return AuthResult{}, err
 	}
 
-	authRes := resdto.AuthRes{
-		User: resdto.UserRes{
-			ID:        u.ID,
-			Username:  u.Username,
-			CreatedAt: u.CreatedAt.Time,
-		},
+	return AuthResult{
+		UserID:    u.ID,
+		Username:  u.Username,
+		CreatedAt: u.CreatedAt.Time,
 		Token:     token,
 		ExpiresAt: exp.Unix(),
-	}
-
-	return authRes, nil
+	}, nil
 }
 
-// Login gets the user by it's username, checks if the password matches, and returns the user or an error
-func (s *Service) Login(ctx context.Context, req reqdto.LoginReq) (resdto.AuthRes, error) {
-	u, err := s.store.GetUserByUsername(ctx, req.Username)
+// Login checks the credentials and returns an AuthResult on success.
+func (s *Service) Login(ctx context.Context, in LoginInput) (AuthResult, error) {
+	u, err := s.store.GetUserByUsername(ctx, in.Username)
 	if err != nil {
-		return resdto.AuthRes{}, ErrUserNotFound
+		return AuthResult{}, ErrUserNotFound
 	}
 
-	err = bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(req.Password))
-	if err != nil {
-		return resdto.AuthRes{}, ErrInvalidCreds
+	if err := bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(in.Password)); err != nil {
+		return AuthResult{}, ErrInvalidCreds
 	}
 
 	token, exp, err := s.generateAccessToken(u)
 	if err != nil {
-		return resdto.AuthRes{}, err
+		return AuthResult{}, err
 	}
 
-	authRes := resdto.AuthRes{
-		User: resdto.UserRes{
-			ID:        u.ID,
-			Username:  u.Username,
-			CreatedAt: u.CreatedAt.Time,
-		},
+	return AuthResult{
+		UserID:    u.ID,
+		Username:  u.Username,
+		CreatedAt: u.CreatedAt.Time,
 		Token:     token,
 		ExpiresAt: exp.Unix(),
-	}
-
-	return authRes, nil
+	}, nil
 }
 
 func (s *Service) generateAccessToken(u dbstore.User) (string, time.Time, error) {

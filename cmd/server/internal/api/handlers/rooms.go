@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 	reqdto "github.com/sleklere/realtime-chat/cmd/server/internal/api/dto/request"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/api/dto/response"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/auth"
+	"github.com/sleklere/realtime-chat/cmd/server/internal/errs"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/httpx"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/room"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/ws"
@@ -74,6 +76,9 @@ func (h *RoomHandler) GetBySlug(w http.ResponseWriter, r *http.Request) error {
 	slug := chi.URLParam(r, "slug")
 	room, err := h.roomSvc.GetRoomBySlug(r.Context(), slug)
 	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			return httpx.New(http.StatusNotFound, "not_found", "room not found", err)
+		}
 		return err
 	}
 

@@ -48,10 +48,15 @@ make run-client
 cmd/
   server/          # HTTP + WebSocket server
     internal/
-      api/         # Router, middleware, handlers
-      auth/        # JWT, bcrypt
+      api/         # Delivery layer: router, middleware, handlers, DTOs
+      auth/        # Bounded context: JWT auth, bcrypt, domain errors
+      room/        # Bounded context: rooms, membership
+      user/        # Bounded context: user lookup
+      conversation/ # Bounded context: DM conversations
       ws/          # WebSocket hub + client dispatch
-      store/       # sqlc-generated DB layer
+      store/       # sqlc-generated DB layer (persistence adapter)
+      httpx/       # HTTP helpers (error types, JSON writer)
+      db/          # DB connection pool
     migrations/    # goose migrations
     queries/       # SQL query files
   client/          # Bubble Tea TUI
@@ -60,6 +65,14 @@ cmd/
       ws/          # WebSocket client
       ui/          # Screens (auth, rooms, chat, dm)
 ```
+
+## Architecture
+
+The server follows a **DDD-lite** approach: bounded context packages (`auth`, `room`, `user`, `conversation`) contain business logic and define their own `Store` interfaces. The `api` package is the HTTP delivery layer — it translates requests into domain calls and responses. The `store` package is the persistence adapter (sqlc-generated, implements the Store interfaces).
+
+Dependency direction: `api` → domain packages → `store`. Domain packages don't know about HTTP or the concrete DB layer.
+
+**What's intentionally omitted:** domain packages use the sqlc-generated types directly (e.g., `dbstore.Room`) rather than defining their own domain types that would require a mapping layer. For a project of this scale, that extra indirection adds boilerplate without practical benefit.
 
 ## WebSocket protocol
 

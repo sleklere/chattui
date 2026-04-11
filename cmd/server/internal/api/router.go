@@ -5,7 +5,6 @@ package api
 import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/api/handlers"
 )
 
 // NewRouter initializes the HTTP router with default middlewares and base routes.
@@ -16,8 +15,7 @@ func NewRouter(a *API) *chi.Mux {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	wsHandler := handlers.NewWSHandler(a.Hub, a.Queries, a.AuthConfig, a.Logger)
-	r.Get("/api/v1/ws", a.handle(wsHandler.Upgrade))
+	r.Get("/api/v1/ws", a.handle(a.WSHandler.Upgrade))
 
 	// group routes to be able to separate timeout middleware from ws endpoint
 	r.Group(func(r chi.Router) {

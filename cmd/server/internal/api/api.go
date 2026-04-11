@@ -10,7 +10,6 @@ import (
 	"github.com/sleklere/realtime-chat/cmd/server/internal/auth"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/conversation"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/room"
-	dbstore "github.com/sleklere/realtime-chat/cmd/server/internal/store"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/user"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/ws"
 )
@@ -19,8 +18,8 @@ import (
 type API struct {
 	Logger     *slog.Logger
 	AuthConfig *auth.Config
-	Queries    *dbstore.Queries
 	Hub        *ws.Hub
+	WSHandler  *handlers.WSHandler
 
 	AuthService         *auth.Service
 	RoomService         *room.Service

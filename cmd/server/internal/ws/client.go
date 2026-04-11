@@ -11,16 +11,16 @@ import (
 )
 
 // NewClient creates a new Client ready to be registered with the Hub.
-func NewClient(hub *Hub, conn *websocket.Conn, queries *dbstore.Queries, userID int64, username string, roomIDs map[int64]bool, logger *slog.Logger) *Client {
+func NewClient(hub *Hub, conn *websocket.Conn, ms MessageStore, userID int64, username string, roomIDs map[int64]bool, logger *slog.Logger) *Client {
 	return &Client{
-		hub:      hub,
-		conn:     conn,
-		queries:  queries,
-		userID:   userID,
-		username: username,
-		roomIDs:  roomIDs,
-		logger:   logger,
-		send:     make(chan Message, 256),
+		hub:          hub,
+		conn:         conn,
+		messageStore: ms,
+		userID:       userID,
+		username:     username,
+		roomIDs:      roomIDs,
+		logger:       logger,
+		send:         make(chan Message, 256),
 	}
 }
 
@@ -100,7 +100,7 @@ func (c *Client) dispatchRoomMessage(msg Message, ctx context.Context) {
 	roomMsgPayload.SenderID = c.userID
 	roomMsgPayload.SenderUsername = c.username
 
-	dbMsg, err := c.queries.CreateMessage(ctx, dbstore.CreateMessageParams{
+	dbMsg, err := c.messageStore.CreateMessage(ctx, dbstore.CreateMessageParams{
 		RoomID:   pgtype.Int8{Int64: roomMsgPayload.RoomID, Valid: true},
 		SenderID: c.userID,
 		Body:     roomMsgPayload.Content,
@@ -138,7 +138,7 @@ func (c *Client) dispatchDirectMessage(msg Message, ctx context.Context) {
 	directMsgPayload.SenderID = c.userID
 	directMsgPayload.SenderUsername = c.username
 
-	dbMsg, err := c.queries.CreateDirectMessage(ctx, dbstore.CreateDirectMessageParams{
+	dbMsg, err := c.messageStore.CreateDirectMessage(ctx, dbstore.CreateDirectMessageParams{
 		SenderID: c.userID,
 		ToUserID: directMsgPayload.ToUserID,
 		Body:     directMsgPayload.Content,

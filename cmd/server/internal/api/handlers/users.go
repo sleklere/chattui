@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 
 	"github.com/sleklere/realtime-chat/cmd/server/internal/api/dto/response"
+	"github.com/sleklere/realtime-chat/cmd/server/internal/errs"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/httpx"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/user"
 )
@@ -29,6 +31,9 @@ func (h *UserHandler) GetByUsername(w http.ResponseWriter, r *http.Request) erro
 
 	u, err := h.userSvc.GetByUsername(r.Context(), username)
 	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			return httpx.New(http.StatusNotFound, "not_found", "user not found", err)
+		}
 		return err
 	}
 

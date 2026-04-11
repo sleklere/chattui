@@ -13,6 +13,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/api"
+	"github.com/sleklere/realtime-chat/cmd/server/internal/api/handlers"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/auth"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/conversation"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/db"
@@ -64,11 +65,14 @@ func main() {
 	hub := ws.NewHub()
 	go hub.Run()
 
+	// queries satisfies ws.MessageStore directly (has CreateMessage + CreateDirectMessage)
+	wsHandler := handlers.NewWSHandler(hub, roomSvc, queries, authCfg, logger)
+
 	a := &api.API{
 		Logger:     logger,
 		AuthConfig: authCfg,
-		Queries:    queries,
 		Hub:        hub,
+		WSHandler:  wsHandler,
 
 		AuthService:         authSvc,
 		RoomService:         roomSvc,

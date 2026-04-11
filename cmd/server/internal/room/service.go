@@ -4,12 +4,11 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"net/http"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/httpx"
+	"github.com/sleklere/realtime-chat/cmd/server/internal/errs"
 	dbstore "github.com/sleklere/realtime-chat/cmd/server/internal/store"
 )
 
@@ -20,6 +19,7 @@ type Store interface {
 	JoinRoom(ctx context.Context, params dbstore.JoinRoomParams) error
 	LeaveRoom(ctx context.Context, params dbstore.LeaveRoomParams) error
 	ListMessagesByRoom(ctx context.Context, params dbstore.ListMessagesByRoomParams) ([]dbstore.ListMessagesByRoomRow, error)
+	GetRoomsForUser(ctx context.Context, userID int64) ([]dbstore.Room, error)
 }
 
 type Service struct {
@@ -47,7 +47,7 @@ func (s *Service) GetRoomBySlug(ctx context.Context, slug string) (dbstore.Room,
 	room, err := s.store.GetRoomBySlug(ctx, slug)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return dbstore.Room{}, httpx.New(http.StatusNotFound, "not_found", "room not found", err)
+			return dbstore.Room{}, errs.ErrNotFound
 		}
 		return dbstore.Room{}, err
 	}
@@ -82,6 +82,10 @@ func (s *Service) Leave(ctx context.Context, roomID int64, userID int64) error {
 		RoomID: roomID,
 		UserID: userID,
 	})
+}
+
+func (s *Service) GetRoomsForUser(ctx context.Context, userID int64) ([]dbstore.Room, error) {
+	return s.store.GetRoomsForUser(ctx, userID)
 }
 
 func (s *Service) GetMessagesByRoomID(ctx context.Context, roomID int64, limit int32) ([]dbstore.ListMessagesByRoomRow, error) {

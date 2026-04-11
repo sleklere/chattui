@@ -1,21 +1,28 @@
 package ws
 
 import (
+	"context"
 	"log/slog"
 
 	"github.com/coder/websocket"
 	dbstore "github.com/sleklere/realtime-chat/cmd/server/internal/store"
 )
 
+// MessageStore defines the persistence operations required by a Client.
+type MessageStore interface {
+	CreateMessage(ctx context.Context, arg dbstore.CreateMessageParams) (dbstore.Message, error)
+	CreateDirectMessage(ctx context.Context, arg dbstore.CreateDirectMessageParams) (dbstore.Message, error)
+}
+
 // Client represents a single WebSocket connection.
 type Client struct {
-	hub      *Hub
-	conn     *websocket.Conn
-	queries  *dbstore.Queries
-	userID   int64
-	username string
-	roomIDs  map[int64]bool // rooms this client is a member of
-	send     chan Message   // Hub writes here, WritePump drains
+	hub          *Hub
+	conn         *websocket.Conn
+	messageStore MessageStore
+	userID       int64
+	username     string
+	roomIDs      map[int64]bool // rooms this client is a member of
+	send         chan Message   // Hub writes here, WritePump drains
 
 	logger *slog.Logger
 }
