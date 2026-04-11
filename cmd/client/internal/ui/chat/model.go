@@ -2,7 +2,6 @@
 package chat
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -24,22 +23,15 @@ type historyLoadedMsg struct {
 	messages []api.MessageResponse
 }
 
-type wsConnectedMsg struct {
-	client *ws.Client
-}
-
 // Model is the Bubble Tea model for the chat room screen.
 type Model struct {
 	apiClient *api.Client
 	wsClient  *ws.Client
-	program   *tea.Program
 	logger    *slog.Logger
 
 	room     api.RoomResponse
 	userID   int64
 	username string
-	wsURL    string
-	token    string
 
 	viewport viewport.Model
 	input    textinput.Model
@@ -59,11 +51,11 @@ type chatMessage struct {
 // New creates a new chat Model for the given room.
 func New(
 	apiClient *api.Client,
-	program *tea.Program,
+	wsClient *ws.Client,
 	logger *slog.Logger,
 	room api.RoomResponse,
 	userID int64,
-	username, wsURL, token string,
+	username string,
 	width, height int,
 ) Model {
 	vp := viewport.New(width, height-4)
@@ -76,13 +68,11 @@ func New(
 
 	return Model{
 		apiClient: apiClient,
-		program:   program,
+		wsClient:  wsClient,
 		logger:    logger,
 		room:      room,
 		userID:    userID,
 		username:  username,
-		wsURL:     wsURL,
-		token:     token,
 		viewport:  vp,
 		input:     input,
 		width:     width,
@@ -94,7 +84,6 @@ func New(
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		m.loadHistory(),
-		m.connectWS(),
 		textinput.Blink,
 	)
 }
@@ -105,7 +94,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "esc":
-			m.cleanup()
 			return m, func() tea.Msg { return LeaveRoomMsg{} }
 		case "enter":
 			return m.sendMessage()
@@ -123,11 +111,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			})
 		}
 		m.updateViewport()
-		return m, nil
-
-	case wsConnectedMsg:
-		m.wsClient = msg.client
-		m.logger.Info("ws connected for chat", "room_id", m.room.ID)
 		return m, nil
 
 	case ws.IncomingMsg:
@@ -266,13 +249,6 @@ func (m *Model) updateViewport() {
 	m.viewport.GotoBottom()
 }
 
-func (m *Model) cleanup() {
-	if m.wsClient != nil {
-		m.wsClient.Close()
-		m.wsClient = nil
-	}
-}
-
 func (m Model) loadHistory() tea.Cmd {
 	return func() tea.Msg {
 		messages, err := m.apiClient.GetMessages(m.room.ID, 50)
@@ -280,15 +256,5 @@ func (m Model) loadHistory() tea.Cmd {
 			return ws.ErrorMsg{Err: err}
 		}
 		return historyLoadedMsg{messages: messages}
-	}
-}
-
-func (m Model) connectWS() tea.Cmd {
-	return func() tea.Msg {
-		client, err := ws.Connect(context.Background(), m.wsURL, m.token, m.program, m.logger)
-		if err != nil {
-			return ws.ErrorMsg{Err: err}
-		}
-		return wsConnectedMsg{client: client}
 	}
 }

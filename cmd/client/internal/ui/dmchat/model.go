@@ -2,7 +2,6 @@
 package dmchat
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -24,10 +23,6 @@ type historyLoadedMsg struct {
 	messages []api.MessageResponse
 }
 
-type wsConnectedMsg struct {
-	client *ws.Client
-}
-
 type dmMessage struct {
 	senderID       int64
 	senderUsername string
@@ -39,7 +34,6 @@ type dmMessage struct {
 type Model struct {
 	apiClient *api.Client
 	wsClient  *ws.Client
-	program   *tea.Program
 	logger    *slog.Logger
 
 	conversationID int64 // 0 if conversation not yet created
@@ -47,8 +41,6 @@ type Model struct {
 	peerUsername   string
 	myUserID       int64
 	myUsername     string
-	wsURL          string
-	token          string
 
 	viewport viewport.Model
 	input    textinput.Model
@@ -61,12 +53,12 @@ type Model struct {
 // New creates a new DM chat Model.
 func New(
 	apiClient *api.Client,
-	program *tea.Program,
+	wsClient *ws.Client,
 	logger *slog.Logger,
 	conversationID, peerID int64,
 	peerUsername string,
 	myUserID int64,
-	myUsername, wsURL, token string,
+	myUsername string,
 	width, height int,
 ) Model {
 	vp := viewport.New(width, height-4)
@@ -79,15 +71,13 @@ func New(
 
 	return Model{
 		apiClient:      apiClient,
-		program:        program,
+		wsClient:       wsClient,
 		logger:         logger,
 		conversationID: conversationID,
 		peerID:         peerID,
 		peerUsername:   peerUsername,
 		myUserID:       myUserID,
 		myUsername:     myUsername,
-		wsURL:          wsURL,
-		token:          token,
 		viewport:       vp,
 		input:          input,
 		width:          width,
@@ -97,7 +87,7 @@ func New(
 
 // Init initializes the DM chat model.
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{m.connectWS(), textinput.Blink}
+	cmds := []tea.Cmd{textinput.Blink}
 	if m.conversationID != 0 {
 		cmds = append(cmds, m.loadHistory())
 	}
@@ -110,7 +100,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "esc":
-			m.cleanup()
 			return m, func() tea.Msg { return LeaveDMMsg{} }
 		case "enter":
 			return m.sendMessage()
@@ -131,11 +120,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			})
 		}
 		m.updateViewport()
-		return m, nil
-
-	case wsConnectedMsg:
-		m.wsClient = msg.client
-		m.logger.Info("ws connected for dm", "peer_id", m.peerID)
 		return m, nil
 
 	case ws.IncomingMsg:
@@ -291,13 +275,6 @@ func (m *Model) updateViewport() {
 	m.viewport.GotoBottom()
 }
 
-func (m *Model) cleanup() {
-	if m.wsClient != nil {
-		m.wsClient.Close()
-		m.wsClient = nil
-	}
-}
-
 func (m Model) loadHistory() tea.Cmd {
 	return func() tea.Msg {
 		msgs, err := m.apiClient.GetConversationMessages(m.conversationID, 50)
@@ -305,15 +282,5 @@ func (m Model) loadHistory() tea.Cmd {
 			return ws.ErrorMsg{Err: err}
 		}
 		return historyLoadedMsg{messages: msgs}
-	}
-}
-
-func (m Model) connectWS() tea.Cmd {
-	return func() tea.Msg {
-		client, err := ws.Connect(context.Background(), m.wsURL, m.token, m.program, m.logger)
-		if err != nil {
-			return ws.ErrorMsg{Err: err}
-		}
-		return wsConnectedMsg{client: client}
 	}
 }

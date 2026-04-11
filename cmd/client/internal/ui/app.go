@@ -2,6 +2,7 @@
 package ui
 
 import (
+	"context"
 	"log/slog"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -12,7 +13,12 @@ import (
 	"github.com/sleklere/realtime-chat/cmd/client/internal/ui/dm"
 	"github.com/sleklere/realtime-chat/cmd/client/internal/ui/dmchat"
 	"github.com/sleklere/realtime-chat/cmd/client/internal/ui/rooms"
+	"github.com/sleklere/realtime-chat/cmd/client/internal/ws"
 )
+
+type wsConnectedMsg struct {
+	client *ws.Client
+}
 
 type screen int
 
@@ -37,11 +43,12 @@ type AppState struct {
 
 // App is the top-level Bubble Tea model that manages screen transitions.
 type App struct {
-	state   *AppState
-	program *tea.Program
-	active  screen
-	width   int
-	height  int
+	state    *AppState
+	program  *tea.Program
+	wsClient *ws.Client
+	active   screen
+	width    int
+	height   int
 
 	auth   auth.Model
 	rooms  rooms.Model
@@ -94,7 +101,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.state.Logger.Info("authenticated", "user_id", msg.UserID, "username", msg.Username)
 		a.active = screenRooms
 		a.rooms = rooms.New(a.state.APIClient, a.width, a.height)
-		return a, a.rooms.Init()
+		return a, tea.Batch(a.rooms.Init(), a.connectWS())
+
+	case wsConnectedMsg:
+		a.wsClient = msg.client
+		a.state.Logger.Info("websocket connected at app level")
+		return a, nil
 
 	case rooms.RoomSelectedMsg:
 		a.state.CurrentRoom = &msg.Room
@@ -102,13 +114,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.active = screenChat
 		a.chat = chat.New(
 			a.state.APIClient,
-			a.program,
+			a.wsClient,
 			a.state.Logger,
 			msg.Room,
 			a.state.UserID,
 			a.state.Username,
-			a.state.Config.WSURL,
-			a.state.Token,
 			a.width,
 			a.height,
 		)
@@ -130,15 +140,13 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.active = screenDMChat
 		a.dmChat = dmchat.New(
 			a.state.APIClient,
-			a.program,
+			a.wsClient,
 			a.state.Logger,
 			msg.Conv.ID,
 			msg.Conv.PeerID,
 			msg.Conv.PeerUsername,
 			a.state.UserID,
 			a.state.Username,
-			a.state.Config.WSURL,
-			a.state.Token,
 			a.width,
 			a.height,
 		)
@@ -148,15 +156,13 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.active = screenDMChat
 		a.dmChat = dmchat.New(
 			a.state.APIClient,
-			a.program,
+			a.wsClient,
 			a.state.Logger,
 			0, // no conversation yet
 			msg.PeerID,
 			msg.PeerUsername,
 			a.state.UserID,
 			a.state.Username,
-			a.state.Config.WSURL,
-			a.state.Token,
 			a.width,
 			a.height,
 		)
@@ -214,4 +220,14 @@ func (a *App) View() string {
 		return a.dmChat.View()
 	}
 	return ""
+}
+
+func (a *App) connectWS() tea.Cmd {
+	return func() tea.Msg {
+		client, err := ws.Connect(context.Background(), a.state.Config.WSURL, a.state.Token, a.program, a.state.Logger)
+		if err != nil {
+			return ws.ErrorMsg{Err: err}
+		}
+		return wsConnectedMsg{client: client}
+	}
 }
