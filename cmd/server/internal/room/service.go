@@ -8,7 +8,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/sleklere/realtime-chat/cmd/server/internal/bus"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/errs"
+	"github.com/sleklere/realtime-chat/cmd/server/internal/event"
 	dbstore "github.com/sleklere/realtime-chat/cmd/server/internal/store"
 )
 
@@ -25,10 +27,11 @@ type Store interface {
 type Service struct {
 	logger *slog.Logger
 	store  Store
+	bus    bus.Bus
 }
 
-func NewService(s Store, l *slog.Logger) *Service {
-	return &Service{store: s, logger: l}
+func NewService(s Store, l *slog.Logger, b bus.Bus) *Service {
+	return &Service{store: s, logger: l, bus: b}
 }
 
 func (s *Service) Create(ctx context.Context, name string) (dbstore.Room, error) {
@@ -71,17 +74,35 @@ func (s *Service) ListRooms(ctx context.Context) ([]dbstore.Room, error) {
 }
 
 func (s *Service) Join(ctx context.Context, roomID int64, userID int64) error {
-	return s.store.JoinRoom(ctx, dbstore.JoinRoomParams{
+	err := s.store.JoinRoom(ctx, dbstore.JoinRoomParams{
 		RoomID: roomID,
 		UserID: userID,
 	})
+	if err != nil {
+		return err
+	}
+
+	// Published after commit. If the process crashes between commit and publish,
+	// the event is lost. Acceptable tradeoff for now; outbox pattern is the upgrade path.
+	s.bus.Publish(ctx, event.RoomJoinedEvent{RoomID: roomID, UserID: userID})
+
+	return nil
 }
 
 func (s *Service) Leave(ctx context.Context, roomID int64, userID int64) error {
-	return s.store.LeaveRoom(ctx, dbstore.LeaveRoomParams{
+	err := s.store.LeaveRoom(ctx, dbstore.LeaveRoomParams{
 		RoomID: roomID,
 		UserID: userID,
 	})
+	if err != nil {
+		return err
+	}
+
+	// Published after commit. If the process crashes between commit and publish,
+	// the event is lost. Acceptable tradeoff for now; outbox pattern is the upgrade path.
+	s.bus.Publish(ctx, event.RoomLeftEvent{RoomID: roomID, UserID: userID})
+
+	return nil
 }
 
 func (s *Service) GetRoomsForUser(ctx context.Context, userID int64) ([]dbstore.Room, error) {

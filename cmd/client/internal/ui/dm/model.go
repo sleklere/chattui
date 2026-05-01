@@ -70,13 +70,13 @@ func (d convItemDelegate) Render(w io.Writer, m list.Model, index int, item list
 
 // Model is the Bubble Tea model for the DM conversation list screen.
 type Model struct {
-	apiClient    *api.Client
-	list         list.Model
-	creating     bool
-	createInput  textinput.Model
-	err          string
-	width        int
-	height       int
+	apiClient   *api.Client
+	list        list.Model
+	creating    bool
+	createInput textinput.Model
+	err         string
+	width       int
+	height      int
 }
 
 // New creates a new DM list Model.

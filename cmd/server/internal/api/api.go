@@ -9,6 +9,7 @@ import (
 	"github.com/sleklere/realtime-chat/cmd/server/internal/api/handlers"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/auth"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/conversation"
+	"github.com/sleklere/realtime-chat/cmd/server/internal/inbox"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/room"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/user"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/ws"
@@ -25,6 +26,7 @@ type API struct {
 	RoomService         *room.Service
 	UserService         *user.Service
 	ConversationService *conversation.Service
+	InboxService        *inbox.Service
 }
 
 // RegisterAuthRoutes registers all authentication-related endpoints under /auth

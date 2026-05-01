@@ -15,8 +15,10 @@ import (
 	"github.com/sleklere/realtime-chat/cmd/server/internal/api"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/api/handlers"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/auth"
+	"github.com/sleklere/realtime-chat/cmd/server/internal/bus"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/conversation"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/db"
+	"github.com/sleklere/realtime-chat/cmd/server/internal/inbox"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/room"
 	dbstore "github.com/sleklere/realtime-chat/cmd/server/internal/store"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/user"
@@ -57,11 +59,15 @@ func main() {
 		Issuer:    "realtime-chat",
 		AccessTTL: 15 * time.Minute,
 	}
+
+	bus := bus.NewBus()
+
 	queries := dbstore.New(pool)
 	authSvc := auth.NewService(queries, logger, authCfg)
-	roomSvc := room.NewService(queries, logger)
+	roomSvc := room.NewService(queries, logger, bus)
 	userSvc := user.NewService(queries, logger)
 	convSvc := conversation.NewService(queries, logger)
+	inboxSvc := inbox.NewService(bus, logger)
 	hub := ws.NewHub()
 	go hub.Run()
 
@@ -78,6 +84,7 @@ func main() {
 		RoomService:         roomSvc,
 		UserService:         userSvc,
 		ConversationService: convSvc,
+		InboxService:        inboxSvc,
 	}
 
 	addr := ":" + getenv("PORT", "8080")
