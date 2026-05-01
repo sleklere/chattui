@@ -65,7 +65,7 @@ func (s *Service) GetRoomBySlug(ctx context.Context, slug string) (dbstore.Room,
 
 func slugify(s string) string {
 	s = strings.ToLower(strings.TrimSpace(s))
-	s = strings.ReplaceAll(s, " ", "-")
+	s = strings.Join(strings.Fields(s), "-")
 	return s
 }
 
