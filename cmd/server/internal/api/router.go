@@ -28,9 +28,11 @@ func NewRouter(a *API) *chi.Mux {
 
 			api.Group(func(protectedRouter chi.Router) {
 				protectedRouter.Use(a.validateJWT)
+
 				a.registerRoomRoutes(protectedRouter)
 				a.registerUserRoutes(protectedRouter)
 				a.registerConversationRoutes(protectedRouter)
+				a.registerInboxRoutes(protectedRouter)
 			})
 		})
 	})

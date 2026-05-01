@@ -66,6 +66,13 @@ func (a *API) registerConversationRoutes(r chi.Router) {
 	})
 }
 
+func (a *API) registerInboxRoutes(r chi.Router) {
+	h := handlers.NewInboxHandler(a.Logger, a.InboxService)
+	r.Route("/inbox", func(r chi.Router) {
+		r.Get("/", a.handle(h.List))
+	})
+}
+
 // registerSystemRoutes registers system-level endpoints such as health checks
 func (a *API) registerSystemRoutes(r chi.Router) {
 	h := handlers.NewSystemHandler(a.Logger)

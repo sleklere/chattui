@@ -11,8 +11,10 @@ import (
 	dbstore "github.com/sleklere/realtime-chat/cmd/server/internal/store"
 )
 
+// Store defines the persistence methods required by the inbox Service.
 type Store interface {
 	SaveRoomEvent(ctx context.Context, params dbstore.SaveRoomEventParams) error
+	FindEventsByUserID(ctx context.Context, params dbstore.FindEventsByUserIDParams) ([]dbstore.FindEventsByUserIDRow, error)
 }
 
 // Service handles inbox events and persists them to the inbox tables.
@@ -68,4 +70,14 @@ func (s *Service) handleRoomLeft(ctx context.Context, e event.Event) error {
 	s.logger.Debug("room_leave", "user_id", roomLeaveEvent.UserID, "room_id", roomLeaveEvent.RoomID)
 
 	return nil
+}
+
+// ListByUser returns inbox events for the given user up to the specified limit.
+func (s *Service) ListByUser(ctx context.Context, userID int64, limit int32) ([]dbstore.FindEventsByUserIDRow, error) {
+	events, err := s.store.FindEventsByUserID(ctx, dbstore.FindEventsByUserIDParams{UserID: userID, Limit: limit})
+	if err != nil {
+		return make([]dbstore.FindEventsByUserIDRow, 0), err
+	}
+
+	return events, nil
 }

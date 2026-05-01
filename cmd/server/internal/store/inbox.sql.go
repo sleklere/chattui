@@ -11,6 +11,57 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const findEventsByUserID = `-- name: FindEventsByUserID :many
+SELECT e.id, e.kind, e.room_id, e.created_at, source_user_id, u.username AS source_username, e.read_at
+FROM inbox_events e
+JOIN users u ON e.source_user_id = u.id
+WHERE e.user_id = $1
+ORDER BY e.created_at DESC LIMIT $2
+`
+
+type FindEventsByUserIDParams struct {
+	UserID int64
+	Limit  int32
+}
+
+type FindEventsByUserIDRow struct {
+	ID             int64
+	Kind           string
+	RoomID         pgtype.Int8
+	CreatedAt      pgtype.Timestamptz
+	SourceUserID   int64
+	SourceUsername string
+	ReadAt         pgtype.Timestamptz
+}
+
+func (q *Queries) FindEventsByUserID(ctx context.Context, arg FindEventsByUserIDParams) ([]FindEventsByUserIDRow, error) {
+	rows, err := q.db.Query(ctx, findEventsByUserID, arg.UserID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindEventsByUserIDRow
+	for rows.Next() {
+		var i FindEventsByUserIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.RoomID,
+			&i.CreatedAt,
+			&i.SourceUserID,
+			&i.SourceUsername,
+			&i.ReadAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const saveRoomEvent = `-- name: SaveRoomEvent :exec
 INSERT INTO inbox_events (user_id, kind, room_id, source_user_id)
     SELECT rm.user_id, $1, $2, $3

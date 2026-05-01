@@ -49,7 +49,7 @@ func TestGenerateAccessToken_ClaimsAreCorrect(t *testing.T) {
 	if !exp.After(time.Now()) {
 		t.Errorf("expected expiration in the future, got %v", exp)
 	}
-	if exp.Sub(time.Now()) > testCfg.AccessTTL {
+	if time.Until(exp) > testCfg.AccessTTL {
 		t.Errorf("expiration exceeds AccessTTL")
 	}
 }
