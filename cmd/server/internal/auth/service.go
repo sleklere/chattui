@@ -25,8 +25,8 @@ type LoginInput struct {
 	Password string
 }
 
-// AuthResult is returned on successful authentication.
-type AuthResult struct {
+// Result is returned on successful authentication.
+type Result struct {
 	UserID    int64
 	Username  string
 	CreatedAt time.Time
@@ -62,13 +62,13 @@ var (
 )
 
 // Register creates a new user account, hashing the password and checking for duplicates.
-func (s *Service) Register(ctx context.Context, in RegisterInput) (AuthResult, error) {
+func (s *Service) Register(ctx context.Context, in RegisterInput) (Result, error) {
 	if _, err := s.store.GetUserByUsername(ctx, in.Username); err == nil {
-		return AuthResult{}, ErrUsernameTaken
+		return Result{}, ErrUsernameTaken
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
 	if err != nil {
-		return AuthResult{}, err
+		return Result{}, err
 	}
 
 	u, err := s.store.CreateUser(ctx, dbstore.CreateUserParams{
@@ -76,15 +76,15 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (AuthResult, e
 		Password: string(hash),
 	})
 	if err != nil {
-		return AuthResult{}, err
+		return Result{}, err
 	}
 
 	token, exp, err := s.generateAccessToken(u)
 	if err != nil {
-		return AuthResult{}, err
+		return Result{}, err
 	}
 
-	return AuthResult{
+	return Result{
 		UserID:    u.ID,
 		Username:  u.Username,
 		CreatedAt: u.CreatedAt.Time,
@@ -93,23 +93,23 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (AuthResult, e
 	}, nil
 }
 
-// Login checks the credentials and returns an AuthResult on success.
-func (s *Service) Login(ctx context.Context, in LoginInput) (AuthResult, error) {
+// Login checks the credentials and returns an Result on success.
+func (s *Service) Login(ctx context.Context, in LoginInput) (Result, error) {
 	u, err := s.store.GetUserByUsername(ctx, in.Username)
 	if err != nil {
-		return AuthResult{}, ErrUserNotFound
+		return Result{}, ErrUserNotFound
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(in.Password)); err != nil {
-		return AuthResult{}, ErrInvalidCreds
+		return Result{}, ErrInvalidCreds
 	}
 
 	token, exp, err := s.generateAccessToken(u)
 	if err != nil {
-		return AuthResult{}, err
+		return Result{}, err
 	}
 
-	return AuthResult{
+	return Result{
 		UserID:    u.ID,
 		Username:  u.Username,
 		CreatedAt: u.CreatedAt.Time,

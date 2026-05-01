@@ -23,7 +23,7 @@ func NewService(b bus.Bus, l *slog.Logger) *Service {
 	return s
 }
 
-func (s *Service) handleRoomJoined(ctx context.Context, e event.Event) error {
+func (s *Service) handleRoomJoined(_ context.Context, e event.Event) error {
 	roomJoinEvent, ok := e.(event.RoomJoinedEvent)
 	if !ok {
 		return fmt.Errorf("inbox: unexpected event type %T", e)
@@ -33,7 +33,7 @@ func (s *Service) handleRoomJoined(ctx context.Context, e event.Event) error {
 	return nil
 }
 
-func (s *Service) handleRoomLeft(ctx context.Context, e event.Event) error {
+func (s *Service) handleRoomLeft(_ context.Context, e event.Event) error {
 	roomLeaveEvent, ok := e.(event.RoomLeftEvent)
 	if !ok {
 		return fmt.Errorf("inbox: unexpected event type %T", e)

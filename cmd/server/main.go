@@ -60,7 +60,7 @@ func main() {
 		AccessTTL: 15 * time.Minute,
 	}
 
-	bus := bus.NewBus()
+	bus := bus.NewBus(logger)
 
 	queries := dbstore.New(pool)
 	authSvc := auth.NewService(queries, logger, authCfg)

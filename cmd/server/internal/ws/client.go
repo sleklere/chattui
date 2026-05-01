@@ -47,11 +47,11 @@ func (c *Client) ReadPump(ctx context.Context) {
 		// 3. switch msg.Type
 		switch msg.Type {
 		case TypeRoomMessage:
-			c.dispatchRoomMessage(msg, ctx)
+			c.dispatchRoomMessage(ctx, msg)
 		case TypeDirectMessage:
-			c.dispatchDirectMessage(msg, ctx)
+			c.dispatchDirectMessage(ctx, msg)
 		case TypeJoinRoom, TypeLeaveRoom:
-			c.dispatchUserRoomUpdate(msg, ctx)
+			c.dispatchUserRoomUpdate(ctx, msg)
 		}
 	}
 }
@@ -81,7 +81,7 @@ func (c *Client) WritePump(ctx context.Context) {
 	}
 }
 
-func (c *Client) dispatchRoomMessage(msg Message, ctx context.Context) {
+func (c *Client) dispatchRoomMessage(ctx context.Context, msg Message) {
 	//    - parsear el RoomMessagePayload del msg.Payload
 	var roomMsgPayload RoomMessagePayload
 	err := json.Unmarshal(msg.Payload, &roomMsgPayload)
@@ -122,7 +122,7 @@ func (c *Client) dispatchRoomMessage(msg Message, ctx context.Context) {
 	c.hub.broadcast <- broadcastMsg
 }
 
-func (c *Client) dispatchDirectMessage(msg Message, ctx context.Context) {
+func (c *Client) dispatchDirectMessage(ctx context.Context, msg Message) {
 	var directMsgPayload DirectMessagePayload
 	err := json.Unmarshal(msg.Payload, &directMsgPayload)
 	if err != nil {
@@ -160,7 +160,7 @@ func (c *Client) dispatchDirectMessage(msg Message, ctx context.Context) {
 	c.hub.broadcast <- broadcastMsg
 }
 
-func (c *Client) dispatchUserRoomUpdate(msg Message, ctx context.Context) {
+func (c *Client) dispatchUserRoomUpdate(_ context.Context, msg Message) {
 
 	var roomPresencePayload RoomPresencePayload
 	err := json.Unmarshal(msg.Payload, &roomPresencePayload)

@@ -5,7 +5,7 @@ import (
 	"github.com/sleklere/realtime-chat/cmd/server/internal/auth"
 )
 
-func authResultToRes(r auth.AuthResult) response.AuthRes {
+func authResultToRes(r auth.Result) response.AuthRes {
 	return response.AuthRes{
 		User: response.UserRes{
 			ID:        r.UserID,

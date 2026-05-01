@@ -11,6 +11,7 @@ type RoomJoinedEvent struct {
 	RoomID int64
 }
 
+// Kind returns the event kind identifier.
 func (e RoomJoinedEvent) Kind() string {
 	return "room_join"
 }
@@ -21,6 +22,7 @@ type RoomLeftEvent struct {
 	RoomID int64
 }
 
+// Kind returns the event kind identifier.
 func (e RoomLeftEvent) Kind() string {
 	return "room_leave"
 }
@@ -33,6 +35,7 @@ type RoomMessageSentEvent struct {
 	Body      string
 }
 
+// Kind returns the event kind identifier.
 func (e RoomMessageSentEvent) Kind() string {
 	return "room_message"
 }
@@ -46,6 +49,7 @@ type DirectMessageSentEvent struct {
 	Body           string
 }
 
+// Kind returns the event kind identifier.
 func (e DirectMessageSentEvent) Kind() string {
 	return "direct_message"
 }

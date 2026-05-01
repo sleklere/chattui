@@ -46,6 +46,7 @@ type BroadcastMsg struct {
 	targetUserIDs []int64 // if targetRoomID == 0, route to these users (DM)
 }
 
+// UserRoomPresent represents a user joining or leaving a room.
 type UserRoomPresent struct {
 	userID  int64
 	roomID  int64
@@ -170,6 +171,7 @@ func (h *Hub) Register(c *Client) {
 	h.register <- c
 }
 
+// UpdateUserRoomState notifies the Hub that a user joined or left a room.
 func (h *Hub) UpdateUserRoomState(roomID int64, userID int64, present bool) {
 	h.userRoomUpdate <- UserRoomPresent{
 		roomID:  roomID,

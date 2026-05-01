@@ -18,7 +18,7 @@ func TestDispatchRoomMessage_InvalidRoomID(t *testing.T) {
 	registerAll(t, h, c, sync)
 
 	payload, _ := json.Marshal(RoomMessagePayload{RoomID: 0, Content: "hi"})
-	c.dispatchRoomMessage(Message{Type: TypeRoomMessage, Payload: payload}, context.Background())
+	c.dispatchRoomMessage(context.Background(), Message{Type: TypeRoomMessage, Payload: payload})
 	syncHub(t, h, sync)
 
 	expectNoMessage(t, c.send)
@@ -32,7 +32,7 @@ func TestDispatchRoomMessage_EmptyContent(t *testing.T) {
 	registerAll(t, h, c, sync)
 
 	payload, _ := json.Marshal(RoomMessagePayload{RoomID: 10, Content: ""})
-	c.dispatchRoomMessage(Message{Type: TypeRoomMessage, Payload: payload}, context.Background())
+	c.dispatchRoomMessage(context.Background(), Message{Type: TypeRoomMessage, Payload: payload})
 	syncHub(t, h, sync)
 
 	expectNoMessage(t, c.send)
@@ -46,7 +46,7 @@ func TestDispatchRoomMessage_ClientNotInRoom(t *testing.T) {
 	registerAll(t, h, c, sync)
 
 	payload, _ := json.Marshal(RoomMessagePayload{RoomID: 99, Content: "hi"})
-	c.dispatchRoomMessage(Message{Type: TypeRoomMessage, Payload: payload}, context.Background())
+	c.dispatchRoomMessage(context.Background(), Message{Type: TypeRoomMessage, Payload: payload})
 	syncHub(t, h, sync)
 
 	expectNoMessage(t, c.send)
@@ -59,7 +59,7 @@ func TestDispatchRoomMessage_MalformedPayload(t *testing.T) {
 	sync := newTestClient(h, 99, map[int64]bool{})
 	registerAll(t, h, c, sync)
 
-	c.dispatchRoomMessage(Message{Type: TypeRoomMessage, Payload: json.RawMessage(`not json`)}, context.Background())
+	c.dispatchRoomMessage(context.Background(), Message{Type: TypeRoomMessage, Payload: json.RawMessage(`not json`)})
 	syncHub(t, h, sync)
 
 	expectNoMessage(t, c.send)
