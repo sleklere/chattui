@@ -14,6 +14,25 @@ type Conversation struct {
 	UserB int64
 }
 
+type InboxConversation struct {
+	ID                int64
+	UserID            int64
+	RefRoomID         pgtype.Int8
+	RefConversationID pgtype.Int8
+	LastReadMessageID pgtype.Int8
+	CreatedAt         pgtype.Timestamptz
+}
+
+type InboxEvent struct {
+	ID           int64
+	UserID       int64
+	Kind         string
+	RoomID       pgtype.Int8
+	CreatedAt    pgtype.Timestamptz
+	SourceUserID int64
+	ReadAt       pgtype.Timestamptz
+}
+
 type Message struct {
 	ID             int64
 	RoomID         pgtype.Int8

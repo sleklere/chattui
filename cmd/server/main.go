@@ -67,7 +67,7 @@ func main() {
 	roomSvc := room.NewService(queries, logger, bus)
 	userSvc := user.NewService(queries, logger)
 	convSvc := conversation.NewService(queries, logger)
-	inboxSvc := inbox.NewService(bus, logger)
+	inboxSvc := inbox.NewService(bus, logger, queries)
 	hub := ws.NewHub()
 	go hub.Run()
 
