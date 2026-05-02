@@ -6,21 +6,22 @@ import (
 	"log/slog"
 
 	"github.com/coder/websocket"
-	"github.com/jackc/pgx/v5/pgtype"
-	dbstore "github.com/sleklere/realtime-chat/cmd/server/internal/store"
+	"github.com/sleklere/realtime-chat/cmd/server/internal/conversation"
+	"github.com/sleklere/realtime-chat/cmd/server/internal/room"
 )
 
 // NewClient creates a new Client ready to be registered with the Hub.
-func NewClient(hub *Hub, conn *websocket.Conn, ms MessageStore, userID int64, username string, roomIDs map[int64]bool, logger *slog.Logger) *Client {
+func NewClient(hub *Hub, conn *websocket.Conn, roomSvc *room.Service, conversationSvc *conversation.Service, userID int64, username string, roomIDs map[int64]bool, logger *slog.Logger) *Client {
 	return &Client{
-		hub:          hub,
-		conn:         conn,
-		messageStore: ms,
-		userID:       userID,
-		username:     username,
-		roomIDs:      roomIDs,
-		logger:       logger,
-		send:         make(chan Message, 256),
+		hub:             hub,
+		conn:            conn,
+		userID:          userID,
+		username:        username,
+		roomIDs:         roomIDs,
+		logger:          logger,
+		send:            make(chan Message, 256),
+		roomSvc:         roomSvc,
+		conversationSvc: conversationSvc,
 	}
 }
 
@@ -100,11 +101,12 @@ func (c *Client) dispatchRoomMessage(ctx context.Context, msg Message) {
 	roomMsgPayload.SenderID = c.userID
 	roomMsgPayload.SenderUsername = c.username
 
-	dbMsg, err := c.messageStore.CreateMessage(ctx, dbstore.CreateMessageParams{
-		RoomID:   pgtype.Int8{Int64: roomMsgPayload.RoomID, Valid: true},
-		SenderID: c.userID,
-		Body:     roomMsgPayload.Content,
-	})
+	dbMsg, err := c.roomSvc.SendRoomMessage(
+		ctx,
+		roomMsgPayload.RoomID,
+		roomMsgPayload.SenderID,
+		roomMsgPayload.Content,
+	)
 	if err != nil {
 		c.logger.Warn("failed to persist room message", "error", err)
 	} else {
@@ -138,16 +140,17 @@ func (c *Client) dispatchDirectMessage(ctx context.Context, msg Message) {
 	directMsgPayload.SenderID = c.userID
 	directMsgPayload.SenderUsername = c.username
 
-	dbMsg, err := c.messageStore.CreateDirectMessage(ctx, dbstore.CreateDirectMessageParams{
-		SenderID: c.userID,
-		ToUserID: directMsgPayload.ToUserID,
-		Body:     directMsgPayload.Content,
-	})
+	dbMsg, err := c.conversationSvc.SendDirectMessage(
+		ctx,
+		directMsgPayload.SenderID,
+		directMsgPayload.ToUserID,
+		directMsgPayload.Content,
+	)
 	if err != nil {
 		c.logger.Warn("failed to persist dm message", "error", err)
-	} else {
-		directMsgPayload.MessageID = dbMsg.ID
 	}
+
+	directMsgPayload.MessageID = dbMsg.ID
 
 	completePayload, err := json.Marshal(directMsgPayload)
 	if err != nil {

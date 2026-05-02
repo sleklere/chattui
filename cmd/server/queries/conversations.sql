@@ -1,8 +1,8 @@
 -- name: GetOrCreateConversation :one
 INSERT INTO conversations (user_a, user_b)
-VALUES (LEAST($1, $2), GREATEST($1, $2))
+VALUES (LEAST(@user_a::bigint, @user_b::bigint), GREATEST(@user_a::bigint, @user_b::bigint))
 ON CONFLICT (user_a, user_b) DO UPDATE SET user_a = EXCLUDED.user_a
-RETURNING id, user_a, user_b;
+RETURNING id, user_a, user_b, (xmax = 0) AS is_new;
 
 -- name: ListConversationsByUser :many
 SELECT conversations.id, peer.id as peer_id, peer.username AS peer_username

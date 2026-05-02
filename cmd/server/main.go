@@ -66,13 +66,13 @@ func main() {
 	authSvc := auth.NewService(queries, logger, authCfg)
 	roomSvc := room.NewService(queries, logger, bus)
 	userSvc := user.NewService(queries, logger)
-	convSvc := conversation.NewService(queries, logger)
+	convSvc := conversation.NewService(queries, logger, bus)
 	inboxSvc := inbox.NewService(bus, logger, queries)
-	hub := ws.NewHub()
+	hub := ws.NewHub(bus)
 	go hub.Run()
 
 	// queries satisfies ws.MessageStore directly (has CreateMessage + CreateDirectMessage)
-	wsHandler := handlers.NewWSHandler(hub, roomSvc, queries, authCfg, logger)
+	wsHandler := handlers.NewWSHandler(hub, roomSvc, convSvc, authCfg, logger)
 
 	a := &api.API{
 		Logger:     logger,

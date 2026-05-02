@@ -12,6 +12,7 @@ import (
 	"github.com/sleklere/realtime-chat/cmd/client/internal/ui/chat"
 	"github.com/sleklere/realtime-chat/cmd/client/internal/ui/dm"
 	"github.com/sleklere/realtime-chat/cmd/client/internal/ui/dmchat"
+	"github.com/sleklere/realtime-chat/cmd/client/internal/ui/inbox"
 	"github.com/sleklere/realtime-chat/cmd/client/internal/ui/rooms"
 	"github.com/sleklere/realtime-chat/cmd/client/internal/ws"
 )
@@ -28,6 +29,7 @@ const (
 	screenChat
 	screenDM
 	screenDMChat
+	screenInbox
 )
 
 // AppState holds shared state across UI screens.
@@ -55,6 +57,7 @@ type App struct {
 	chat   chat.Model
 	dm     dm.Model
 	dmChat dmchat.Model
+	inbox  inbox.Model
 }
 
 // NewApp creates a new App with the given configuration and logger.
@@ -177,6 +180,21 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.active = screenDM
 		a.dm = dm.New(a.state.APIClient, a.width, a.height)
 		return a, a.dm.Init()
+
+	case rooms.ShowInboxMsg, dm.ShowInboxMsg:
+		a.active = screenInbox
+		a.inbox = inbox.New(a.state.APIClient, a.width, a.height)
+		return a, a.inbox.Init()
+
+	case inbox.LeaveInboxMsg:
+		a.active = screenRooms
+		a.rooms = rooms.New(a.state.APIClient, a.width, a.height)
+		return a, a.rooms.Init()
+
+	case inbox.ShowDMsMsg:
+		a.active = screenDM
+		a.dm = dm.New(a.state.APIClient, a.width, a.height)
+		return a, a.dm.Init()
 	}
 
 	switch a.active {
@@ -200,6 +218,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		a.dmChat, cmd = a.dmChat.Update(msg)
 		return a, cmd
+	case screenInbox:
+		var cmd tea.Cmd
+		a.inbox, cmd = a.inbox.Update(msg)
+		return a, cmd
 	}
 
 	return a, nil
@@ -218,6 +240,8 @@ func (a *App) View() string {
 		return a.dm.View()
 	case screenDMChat:
 		return a.dmChat.View()
+	case screenInbox:
+		return a.inbox.View()
 	}
 	return ""
 }

@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sleklere/realtime-chat/cmd/client/internal/api"
+	"github.com/sleklere/realtime-chat/cmd/client/internal/ui/tabbar"
 	"github.com/sleklere/realtime-chat/cmd/client/internal/ui/theme"
 )
 
@@ -21,6 +22,9 @@ type RoomSelectedMsg struct {
 
 // ShowDMsMsg signals that the user wants to navigate to the DM screen.
 type ShowDMsMsg struct{}
+
+// ShowInboxMsg signals that the user wants to navigate to the inbox screen.
+type ShowInboxMsg struct{}
 
 // RoomErrorMsg signals an error in room operations.
 type RoomErrorMsg struct {
@@ -146,8 +150,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				}
 			}
 			return m, nil
+		case "tab":
+			return m, func() tea.Msg { return ShowDMsMsg{} }
+		case "shift+tab":
+			return m, func() tea.Msg { return ShowInboxMsg{} }
 		case "d":
 			return m, func() tea.Msg { return ShowDMsMsg{} }
+		case "i":
+			return m, func() tea.Msg { return ShowInboxMsg{} }
 		case "r":
 			return m, m.fetchRooms()
 		case "enter":
@@ -198,6 +208,8 @@ func (m Model) View() string {
 
 	var b strings.Builder
 
+	b.WriteString(tabbar.Render("Rooms"))
+	b.WriteString("\n")
 	b.WriteString(m.list.View())
 	b.WriteString("\n")
 
@@ -220,7 +232,7 @@ func (m Model) View() string {
 	if m.pickingTheme {
 		b.WriteString(helpStyle.Render("j/k: navigate  enter: apply  esc: cancel"))
 	} else {
-		b.WriteString(helpStyle.Render("enter: join  n: new room  d: DMs  t: theme  r: refresh  esc: quit"))
+		b.WriteString(helpStyle.Render("enter: join  n: new room  tab: switch tabs  t: theme  r: refresh  esc: quit"))
 	}
 
 	return b.String()

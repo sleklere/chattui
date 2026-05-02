@@ -11,40 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createDirectMessage = `-- name: CreateDirectMessage :one
-WITH conv AS (
-    INSERT INTO conversations (user_a, user_b)
-    VALUES (least($1::bigint, $3::bigint),
-        greatest($1::bigint, $3::bigint))
-        ON CONFLICT (user_a, user_b)
-        DO UPDATE SET user_a = EXCLUDED.user_a
-    RETURNING id
-)
-INSERT INTO messages (conversation_id, sender_id, body)
-    SELECT id, $1, $2 FROM conv
-RETURNING id, room_id, conversation_id, sender_id, body, created_at
-`
-
-type CreateDirectMessageParams struct {
-	SenderID int64
-	Body     string
-	ToUserID int64
-}
-
-func (q *Queries) CreateDirectMessage(ctx context.Context, arg CreateDirectMessageParams) (Message, error) {
-	row := q.db.QueryRow(ctx, createDirectMessage, arg.SenderID, arg.Body, arg.ToUserID)
-	var i Message
-	err := row.Scan(
-		&i.ID,
-		&i.RoomID,
-		&i.ConversationID,
-		&i.SenderID,
-		&i.Body,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
 const createMessage = `-- name: CreateMessage :one
 INSERT INTO messages (room_id, conversation_id, sender_id, body)
 VALUES ($1, $2, $3, $4)

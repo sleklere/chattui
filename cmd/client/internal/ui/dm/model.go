@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sleklere/realtime-chat/cmd/client/internal/api"
+	"github.com/sleklere/realtime-chat/cmd/client/internal/ui/tabbar"
 	"github.com/sleklere/realtime-chat/cmd/client/internal/ui/theme"
 )
 
@@ -27,6 +28,9 @@ type NewDMMsg struct {
 
 // LeaveDMListMsg signals that the user wants to go back to rooms.
 type LeaveDMListMsg struct{}
+
+// ShowInboxMsg signals that the user wants to navigate to the inbox screen.
+type ShowInboxMsg struct{}
 
 type convsLoadedMsg struct {
 	convs []api.ConversationResponse
@@ -123,6 +127,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		switch msg.String() {
 		case "esc":
 			return m, func() tea.Msg { return LeaveDMListMsg{} }
+		case "tab":
+			return m, func() tea.Msg { return ShowInboxMsg{} }
+		case "shift+tab":
+			return m, func() tea.Msg { return LeaveDMListMsg{} }
+		case "i":
+			return m, func() tea.Msg { return ShowInboxMsg{} }
 		case "n":
 			m.creating = true
 			m.createInput.SetValue("")
@@ -172,6 +182,8 @@ func (m Model) View() string {
 
 	var b strings.Builder
 
+	b.WriteString(tabbar.Render("DMs"))
+	b.WriteString("\n")
 	b.WriteString(m.list.View())
 	b.WriteString("\n")
 
@@ -186,7 +198,7 @@ func (m Model) View() string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString(helpStyle.Render("enter: open  n: new DM  esc: back to rooms"))
+	b.WriteString(helpStyle.Render("enter: open  n: new DM  tab: switch tabs  esc: back to rooms"))
 
 	return b.String()
 }

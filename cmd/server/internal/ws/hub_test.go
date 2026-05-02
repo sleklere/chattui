@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"testing"
 	"time"
+
+	"github.com/sleklere/realtime-chat/cmd/server/internal/bus"
 )
 
 // ---------------------------------------------------------------------------
@@ -84,7 +86,7 @@ func syncHub(t *testing.T, h *Hub, via *Client) {
 // startHub creates a Hub, starts its Run loop, and returns it.
 func startHub(t *testing.T) *Hub {
 	t.Helper()
-	h := NewHub()
+	h := NewHub(bus.NewBus(nopLogger))
 	go h.Run()
 	return h
 }

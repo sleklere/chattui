@@ -53,3 +53,15 @@ type DirectMessageSentEvent struct {
 func (e DirectMessageSentEvent) Kind() string {
 	return "direct_message"
 }
+
+// ConversationCreatedEvent is published the first time a DM conversation is created.
+type ConversationCreatedEvent struct {
+	ConversationID int64
+	UserAID        int64
+	UserBID        int64
+}
+
+// Kind returns the event kind identifier.
+func (e ConversationCreatedEvent) Kind() string {
+	return "conversation_created"
+}

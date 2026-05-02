@@ -23,6 +23,7 @@ type Store interface {
 	LeaveRoom(ctx context.Context, params dbstore.LeaveRoomParams) error
 	ListMessagesByRoom(ctx context.Context, params dbstore.ListMessagesByRoomParams) ([]dbstore.ListMessagesByRoomRow, error)
 	GetRoomsForUser(ctx context.Context, userID int64) ([]dbstore.Room, error)
+	CreateMessage(ctx context.Context, params dbstore.CreateMessageParams) (dbstore.Message, error)
 }
 
 // Service provides room-related business logic.
@@ -129,4 +130,26 @@ func (s *Service) GetMessagesByRoomID(ctx context.Context, roomID int64, limit i
 	}
 
 	return msgs, nil
+}
+
+// SendRoomMessage persists a room message and publishes a RoomMessageSentEvent.
+func (s *Service) SendRoomMessage(ctx context.Context, roomID int64, senderID int64, body string) (dbstore.Message, error) {
+	dbMsg, err := s.store.CreateMessage(ctx, dbstore.CreateMessageParams{
+		RoomID:   pgtype.Int8{Int64: roomID, Valid: true},
+		SenderID: senderID,
+		Body:     body,
+	})
+	if err != nil {
+		return dbMsg, err
+	}
+
+	s.bus.Publish(ctx,
+		event.RoomMessageSentEvent{
+			RoomID:    dbMsg.RoomID.Int64,
+			SenderID:  senderID,
+			MessageID: dbMsg.ID,
+			Body:      body,
+		})
+
+	return dbMsg, nil
 }

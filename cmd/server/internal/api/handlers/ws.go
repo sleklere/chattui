@@ -9,6 +9,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/auth"
+	"github.com/sleklere/realtime-chat/cmd/server/internal/conversation"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/httpx"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/room"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/ws"
@@ -16,16 +17,16 @@ import (
 
 // WSHandler handles WebSocket upgrade requests.
 type WSHandler struct {
-	hub          *ws.Hub
-	roomSvc      *room.Service
-	messageStore ws.MessageStore
-	authConfig   *auth.Config
-	logger       *slog.Logger
+	hub             *ws.Hub
+	roomSvc         *room.Service
+	conversationSvc *conversation.Service
+	authConfig      *auth.Config
+	logger          *slog.Logger
 }
 
 // NewWSHandler creates a new WSHandler.
-func NewWSHandler(hub *ws.Hub, roomSvc *room.Service, ms ws.MessageStore, authConfig *auth.Config, logger *slog.Logger) *WSHandler {
-	return &WSHandler{hub: hub, roomSvc: roomSvc, messageStore: ms, authConfig: authConfig, logger: logger}
+func NewWSHandler(hub *ws.Hub, roomSvc *room.Service, conversationSvc *conversation.Service, authConfig *auth.Config, logger *slog.Logger) *WSHandler {
+	return &WSHandler{hub: hub, roomSvc: roomSvc, conversationSvc: conversationSvc, authConfig: authConfig, logger: logger}
 }
 
 // Upgrade handles the HTTP→WebSocket upgrade, authenticates via query param token, and starts the client pumps.
@@ -62,7 +63,7 @@ func (h *WSHandler) Upgrade(w http.ResponseWriter, r *http.Request) error {
 		roomIDs[r.ID] = true
 	}
 
-	client := ws.NewClient(h.hub, conn, h.messageStore, claims.UserID, claims.Username, roomIDs, h.logger)
+	client := ws.NewClient(h.hub, conn, h.roomSvc, h.conversationSvc, claims.UserID, claims.Username, roomIDs, h.logger)
 	h.hub.Register(client)
 
 	go client.WritePump(context.Background())

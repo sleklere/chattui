@@ -13,8 +13,9 @@ import (
 
 // Store defines the persistence methods required by the inbox Service.
 type Store interface {
-	SaveRoomEvent(ctx context.Context, params dbstore.SaveRoomEventParams) error
+	SaveInboxRoomEvent(ctx context.Context, params dbstore.SaveInboxRoomEventParams) error
 	FindEventsByUserID(ctx context.Context, params dbstore.FindEventsByUserIDParams) ([]dbstore.FindEventsByUserIDRow, error)
+	UpsertInboxConversationCursor(ctx context.Context, params dbstore.UpsertInboxConversationCursorParams) error
 }
 
 // Service handles inbox events and persists them to the inbox tables.
@@ -29,6 +30,7 @@ func NewService(b bus.Bus, l *slog.Logger, s Store) *Service {
 	svc := &Service{bus: b, logger: l, store: s}
 	b.Subscribe("room_join", svc.handleRoomJoined)
 	b.Subscribe("room_leave", svc.handleRoomLeft)
+	b.Subscribe("conversation_created", svc.handleConversationCreated)
 	return svc
 }
 
@@ -37,17 +39,24 @@ func (s *Service) handleRoomJoined(ctx context.Context, e event.Event) error {
 	if !ok {
 		return fmt.Errorf("inbox: unexpected event type %T", e)
 	}
-	err := s.store.SaveRoomEvent(
-		ctx,
-		dbstore.SaveRoomEventParams{
-			Kind:         e.Kind(),
-			RoomID:       pgtype.Int8{Int64: roomJoinEvent.RoomID, Valid: true},
-			SourceUserID: roomJoinEvent.UserID})
-	if err != nil {
+
+	if err := s.store.SaveInboxRoomEvent(ctx, dbstore.SaveInboxRoomEventParams{
+		Kind:         e.Kind(),
+		RoomID:       pgtype.Int8{Int64: roomJoinEvent.RoomID, Valid: true},
+		SourceUserID: roomJoinEvent.UserID,
+	}); err != nil {
 		return fmt.Errorf("inbox: saving %s to DB: %w", e.Kind(), err)
 	}
-	s.logger.Debug("room_join", "user_id", roomJoinEvent.UserID, "room_id", roomJoinEvent.RoomID)
 
+	if err := s.store.UpsertInboxConversationCursor(ctx, dbstore.UpsertInboxConversationCursorParams{
+		UserID:            roomJoinEvent.UserID,
+		RefRoomID:         pgtype.Int8{Int64: roomJoinEvent.RoomID, Valid: true},
+		RefConversationID: pgtype.Int8{Valid: false},
+	}); err != nil {
+		s.logger.Warn("inbox: failed to upsert room cursor", "user_id", roomJoinEvent.UserID, "room_id", roomJoinEvent.RoomID, "error", err)
+	}
+
+	s.logger.Debug("room_join", "user_id", roomJoinEvent.UserID, "room_id", roomJoinEvent.RoomID)
 	return nil
 }
 
@@ -56,19 +65,40 @@ func (s *Service) handleRoomLeft(ctx context.Context, e event.Event) error {
 	if !ok {
 		return fmt.Errorf("inbox: unexpected event type %T", e)
 	}
-	err := s.store.SaveRoomEvent(
-		ctx,
-		dbstore.SaveRoomEventParams{
-			Kind:         e.Kind(),
-			RoomID:       pgtype.Int8{Int64: roomLeaveEvent.RoomID, Valid: true},
-			SourceUserID: roomLeaveEvent.UserID,
-		},
-	)
-	if err != nil {
+	if err := s.store.SaveInboxRoomEvent(ctx, dbstore.SaveInboxRoomEventParams{
+		Kind:         e.Kind(),
+		RoomID:       pgtype.Int8{Int64: roomLeaveEvent.RoomID, Valid: true},
+		SourceUserID: roomLeaveEvent.UserID,
+	}); err != nil {
 		return fmt.Errorf("inbox: saving %s to DB: %w", e.Kind(), err)
 	}
 	s.logger.Debug("room_leave", "user_id", roomLeaveEvent.UserID, "room_id", roomLeaveEvent.RoomID)
+	return nil
+}
 
+func (s *Service) handleConversationCreated(ctx context.Context, e event.Event) error {
+	convEvent, ok := e.(event.ConversationCreatedEvent)
+	if !ok {
+		return fmt.Errorf("inbox: unexpected event type %T", e)
+	}
+
+	if err := s.store.UpsertInboxConversationCursor(ctx, dbstore.UpsertInboxConversationCursorParams{
+		UserID:            convEvent.UserAID,
+		RefRoomID:         pgtype.Int8{Valid: false},
+		RefConversationID: pgtype.Int8{Int64: convEvent.ConversationID, Valid: true},
+	}); err != nil {
+		s.logger.Warn("inbox: failed to upsert conversation cursor", "user_id", convEvent.UserAID, "conversation_id", convEvent.ConversationID, "error", err)
+	}
+
+	if err := s.store.UpsertInboxConversationCursor(ctx, dbstore.UpsertInboxConversationCursorParams{
+		UserID:            convEvent.UserBID,
+		RefRoomID:         pgtype.Int8{Valid: false},
+		RefConversationID: pgtype.Int8{Int64: convEvent.ConversationID, Valid: true},
+	}); err != nil {
+		s.logger.Warn("inbox: failed to upsert conversation cursor", "user_id", convEvent.UserBID, "conversation_id", convEvent.ConversationID, "error", err)
+	}
+
+	s.logger.Debug("conversation_created", "conversation_id", convEvent.ConversationID)
 	return nil
 }
 
@@ -78,6 +108,5 @@ func (s *Service) ListByUser(ctx context.Context, userID int64, limit int32) ([]
 	if err != nil {
 		return make([]dbstore.FindEventsByUserIDRow, 0), err
 	}
-
 	return events, nil
 }

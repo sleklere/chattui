@@ -53,6 +53,17 @@ type CreateRoomRequest struct {
 	Name string `json:"name"`
 }
 
+// InboxEvent represents an inbox event from the server.
+type InboxEvent struct {
+	ID             int64      `json:"id"`
+	Kind           string     `json:"kind"`
+	RoomID         int64      `json:"room_id"`
+	CreatedAt      time.Time  `json:"created_at"`
+	SourceUserID   int64      `json:"source_user_id"`
+	SourceUsername string     `json:"source_username"`
+	ReadAt         *time.Time `json:"read_at"`
+}
+
 // Error represents a structured error response from the server.
 type Error struct {
 	Code    string `json:"code,omitempty"`

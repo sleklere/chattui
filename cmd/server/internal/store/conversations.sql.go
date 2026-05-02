@@ -11,20 +11,32 @@ import (
 
 const getOrCreateConversation = `-- name: GetOrCreateConversation :one
 INSERT INTO conversations (user_a, user_b)
-VALUES (LEAST($1, $2), GREATEST($1, $2))
+VALUES (LEAST($1::bigint, $2::bigint), GREATEST($1::bigint, $2::bigint))
 ON CONFLICT (user_a, user_b) DO UPDATE SET user_a = EXCLUDED.user_a
-RETURNING id, user_a, user_b
+RETURNING id, user_a, user_b, (xmax = 0) AS is_new
 `
 
 type GetOrCreateConversationParams struct {
-	Column1 interface{}
-	Column2 interface{}
+	UserA int64
+	UserB int64
 }
 
-func (q *Queries) GetOrCreateConversation(ctx context.Context, arg GetOrCreateConversationParams) (Conversation, error) {
-	row := q.db.QueryRow(ctx, getOrCreateConversation, arg.Column1, arg.Column2)
-	var i Conversation
-	err := row.Scan(&i.ID, &i.UserA, &i.UserB)
+type GetOrCreateConversationRow struct {
+	ID    int64
+	UserA int64
+	UserB int64
+	IsNew bool
+}
+
+func (q *Queries) GetOrCreateConversation(ctx context.Context, arg GetOrCreateConversationParams) (GetOrCreateConversationRow, error) {
+	row := q.db.QueryRow(ctx, getOrCreateConversation, arg.UserA, arg.UserB)
+	var i GetOrCreateConversationRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserA,
+		&i.UserB,
+		&i.IsNew,
+	)
 	return i, err
 }
 

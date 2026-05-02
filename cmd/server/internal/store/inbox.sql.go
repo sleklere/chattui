@@ -62,7 +62,7 @@ func (q *Queries) FindEventsByUserID(ctx context.Context, arg FindEventsByUserID
 	return items, nil
 }
 
-const saveRoomEvent = `-- name: SaveRoomEvent :exec
+const saveInboxRoomEvent = `-- name: SaveInboxRoomEvent :exec
 INSERT INTO inbox_events (user_id, kind, room_id, source_user_id)
     SELECT rm.user_id, $1, $2, $3
     FROM room_members rm
@@ -70,13 +70,30 @@ INSERT INTO inbox_events (user_id, kind, room_id, source_user_id)
     AND rm.user_id != $3
 `
 
-type SaveRoomEventParams struct {
+type SaveInboxRoomEventParams struct {
 	Kind         string
 	RoomID       pgtype.Int8
 	SourceUserID int64
 }
 
-func (q *Queries) SaveRoomEvent(ctx context.Context, arg SaveRoomEventParams) error {
-	_, err := q.db.Exec(ctx, saveRoomEvent, arg.Kind, arg.RoomID, arg.SourceUserID)
+func (q *Queries) SaveInboxRoomEvent(ctx context.Context, arg SaveInboxRoomEventParams) error {
+	_, err := q.db.Exec(ctx, saveInboxRoomEvent, arg.Kind, arg.RoomID, arg.SourceUserID)
+	return err
+}
+
+const upsertInboxConversationCursor = `-- name: UpsertInboxConversationCursor :exec
+INSERT INTO inbox_conversations (user_id, ref_room_id, ref_conversation_id)
+    VALUES ($1, $2, $3)
+    ON CONFLICT DO NOTHING
+`
+
+type UpsertInboxConversationCursorParams struct {
+	UserID            int64
+	RefRoomID         pgtype.Int8
+	RefConversationID pgtype.Int8
+}
+
+func (q *Queries) UpsertInboxConversationCursor(ctx context.Context, arg UpsertInboxConversationCursorParams) error {
+	_, err := q.db.Exec(ctx, upsertInboxConversationCursor, arg.UserID, arg.RefRoomID, arg.RefConversationID)
 	return err
 }
