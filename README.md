@@ -40,6 +40,7 @@ make run-client
 - Real-time room messaging via WebSocket
 - Direct messages (1-to-1)
 - Message history (REST)
+- Notification inbox (room events + unread message counts)
 - Multiple themes: Catppuccin, Rose-Pine, Kanagawa
 
 ## Project layout
@@ -74,8 +75,3 @@ Dependency direction: `api` → domain packages → `store`. Domain packages don
 
 **What's intentionally omitted:** domain packages use the sqlc-generated types directly (e.g., `dbstore.Room`) rather than defining their own domain types that would require a mapping layer. For a project of this scale, that extra indirection adds boilerplate without practical benefit.
 
-## WebSocket protocol
-
-All messages use an envelope: `{"type": "<type>", "payload": {...}, "timestamp": "<RFC3339>"}`.
-
-Client → server types: `room_message`, `direct_message`, `join_room`, `leave_room`, `user_typing`.
