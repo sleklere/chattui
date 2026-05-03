@@ -6,8 +6,16 @@ import (
 	"os"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// Beginner can begin a database transaction. *pgxpool.Pool satisfies this interface.
+// Services that need to run multiple queries atomically depend on this instead of
+// the full pool, keeping the dependency minimal and mockable in tests.
+type Beginner interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
+}
 
 // NewPool creates a new pgx connection pool.
 func NewPool(ctx context.Context) (*pgxpool.Pool, error) {

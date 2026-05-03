@@ -64,7 +64,7 @@ func main() {
 
 	queries := dbstore.New(pool)
 	authSvc := auth.NewService(queries, logger, authCfg)
-	roomSvc := room.NewService(queries, logger, bus)
+	roomSvc := room.NewService(queries, logger, bus, pool)
 	userSvc := user.NewService(queries, logger)
 	convSvc := conversation.NewService(queries, logger, bus)
 	inboxSvc := inbox.NewService(bus, logger, queries)

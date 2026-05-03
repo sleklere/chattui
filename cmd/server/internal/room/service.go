@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/bus"
+	"github.com/sleklere/realtime-chat/cmd/server/internal/db"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/errs"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/event"
 	dbstore "github.com/sleklere/realtime-chat/cmd/server/internal/store"
@@ -30,31 +31,39 @@ type Store interface {
 type Service struct {
 	logger *slog.Logger
 	store  Store
+	db     db.Beginner
 	bus    bus.Bus
 }
 
 // NewService creates a new room Service.
-func NewService(s Store, l *slog.Logger, b bus.Bus) *Service {
-	return &Service{store: s, logger: l, bus: b}
+func NewService(s Store, l *slog.Logger, b bus.Bus, d db.Beginner) *Service {
+	return &Service{store: s, logger: l, bus: b, db: d}
 }
 
 // Create creates a new room with the given name and adds the creator as a member.
+// Both operations run inside a transaction so a JoinRoom failure never leaves an orphaned room.
 func (s *Service) Create(ctx context.Context, name string, creatorID int64) (dbstore.Room, error) {
-	slug := slugify(name)
-	room, err := s.store.CreateRoom(ctx, dbstore.CreateRoomParams{
-		Name: name,
-		Slug: slug,
-	})
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return dbstore.Room{}, err
 	}
+	// Rollback is a no-op if Commit already succeeded; the error is intentionally ignored.
+	defer tx.Rollback(ctx) //nolint:errcheck
 
-	if err := s.store.JoinRoom(ctx, dbstore.JoinRoomParams{RoomID: room.ID, UserID: creatorID}); err != nil {
+	q := dbstore.New(tx)
+	slug := slugify(name)
+	room, err := q.CreateRoom(ctx, dbstore.CreateRoomParams{Name: name, Slug: slug})
+	if err != nil {
+		return dbstore.Room{}, err
+	}
+	if err := q.JoinRoom(ctx, dbstore.JoinRoomParams{RoomID: room.ID, UserID: creatorID}); err != nil {
+		return dbstore.Room{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return dbstore.Room{}, err
 	}
 
 	s.bus.Publish(ctx, event.RoomJoinedEvent{RoomID: room.ID, UserID: creatorID})
-
 	return room, nil
 }
 

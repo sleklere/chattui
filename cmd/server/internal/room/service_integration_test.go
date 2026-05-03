@@ -9,17 +9,34 @@ import (
 	"github.com/sleklere/realtime-chat/cmd/server/internal/testhelper"
 )
 
-// newUser creates a user directly via the store and returns their ID.
+// newSvc creates a Service wired to testPool.
+func newSvc(t *testing.T, b bus.Bus) (*Service, *dbstore.Queries) {
+	t.Helper()
+	q := dbstore.New(testPool)
+	return NewService(q, testhelper.DiscardLogger(), b, testPool), q
+}
+
+// newUser inserts a user and registers cleanup.
 func newUser(t *testing.T, q *dbstore.Queries, username string) int64 {
 	t.Helper()
-	u, err := q.CreateUser(context.Background(), dbstore.CreateUserParams{
-		Username: username,
-		Password: "hashed",
-	})
+	ctx := context.Background()
+	u, err := q.CreateUser(ctx, dbstore.CreateUserParams{Username: username, Password: "x"})
 	if err != nil {
 		t.Fatalf("create user %s: %v", username, err)
 	}
+	t.Cleanup(func() { testPool.Exec(ctx, "DELETE FROM users WHERE id = $1", u.ID) }) //nolint:errcheck
 	return u.ID
+}
+
+// newRoom creates a room via the service and registers cleanup.
+func newRoom(t *testing.T, svc *Service, name string, creatorID int64) dbstore.Room {
+	t.Helper()
+	room, err := svc.Create(context.Background(), name, creatorID)
+	if err != nil {
+		t.Fatalf("Create room %q: %v", name, err)
+	}
+	t.Cleanup(func() { testPool.Exec(context.Background(), "DELETE FROM rooms WHERE id = $1", room.ID) }) //nolint:errcheck
+	return room
 }
 
 func TestCreate_CreatorIsAddedAsMember(t *testing.T) {
@@ -27,15 +44,10 @@ func TestCreate_CreatorIsAddedAsMember(t *testing.T) {
 		t.Skip("testcontainers not available")
 	}
 	ctx := context.Background()
-	q := testhelper.WithTx(t, testPool)
-	svc := NewService(q, testhelper.DiscardLogger(), bus.NewBus(testhelper.DiscardLogger()))
+	svc, q := newSvc(t, bus.NewBus(testhelper.DiscardLogger()))
 
 	userID := newUser(t, q, "creator")
-
-	room, err := svc.Create(ctx, "General", userID)
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
+	room := newRoom(t, svc, "General", userID)
 
 	rooms, err := q.GetRoomsForUser(ctx, userID)
 	if err != nil {
@@ -46,33 +58,26 @@ func TestCreate_CreatorIsAddedAsMember(t *testing.T) {
 	}
 }
 
-func TestCreate_JoinFailure_RoomOrphaned(t *testing.T) {
+func TestCreate_JoinFailure_RollsBack(t *testing.T) {
 	if testPool == nil {
 		t.Skip("testcontainers not available")
 	}
-	// This test documents a known bug: Create is not wrapped in a transaction.
-	// If JoinRoom fails, the room is already committed and becomes orphaned.
-	// The test currently FAILS — it should PASS once Create uses a transaction.
 	ctx := context.Background()
-	q := dbstore.New(testPool) // direct pool: we need to see committed state
-	svc := NewService(q, testhelper.DiscardLogger(), bus.NewBus(testhelper.DiscardLogger()))
+	svc, q := newSvc(t, bus.NewBus(testhelper.DiscardLogger()))
 
 	const slug = "orphan-room"
-	const nonExistentUserID = int64(999999)
-
-	// Ensure the slug is clean before and after (in case a previous run crashed).
 	_, _ = testPool.Exec(ctx, "DELETE FROM rooms WHERE slug = $1", slug)
-	t.Cleanup(func() { _, _ = testPool.Exec(ctx, "DELETE FROM rooms WHERE slug = $1", slug) })
+	t.Cleanup(func() { testPool.Exec(ctx, "DELETE FROM rooms WHERE slug = $1", slug) }) //nolint:errcheck
 
-	_, err := svc.Create(ctx, "Orphan Room", nonExistentUserID)
+	_, err := svc.Create(ctx, "Orphan Room", 999999) // non-existent user → JoinRoom fails
 	if err == nil {
-		t.Fatal("expected Create to return an error when creator user does not exist")
+		t.Fatal("expected error when creator does not exist")
 	}
 
-	// If Create were transactional, no room would survive the JoinRoom failure.
+	// Transaction must have rolled back — room must not exist.
 	_, lookupErr := q.GetRoomBySlug(ctx, slug)
 	if lookupErr == nil {
-		t.Fatalf("BUG: room %q was committed despite Create failing — Create is not transactional", slug)
+		t.Fatal("room exists after failed Create — transaction did not roll back")
 	}
 }
 
@@ -81,16 +86,11 @@ func TestJoin_AddsUserToRoom(t *testing.T) {
 		t.Skip("testcontainers not available")
 	}
 	ctx := context.Background()
-	q := testhelper.WithTx(t, testPool)
-	svc := NewService(q, testhelper.DiscardLogger(), bus.NewBus(testhelper.DiscardLogger()))
+	svc, q := newSvc(t, bus.NewBus(testhelper.DiscardLogger()))
 
 	creatorID := newUser(t, q, "owner")
 	joinerID := newUser(t, q, "joiner")
-
-	room, err := svc.Create(ctx, "Lobby", creatorID)
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
+	room := newRoom(t, svc, "Lobby", creatorID)
 
 	if err := svc.Join(ctx, room.ID, joinerID); err != nil {
 		t.Fatalf("Join: %v", err)
@@ -110,15 +110,10 @@ func TestLeave_RemovesUserFromRoom(t *testing.T) {
 		t.Skip("testcontainers not available")
 	}
 	ctx := context.Background()
-	q := testhelper.WithTx(t, testPool)
-	svc := NewService(q, testhelper.DiscardLogger(), bus.NewBus(testhelper.DiscardLogger()))
+	svc, q := newSvc(t, bus.NewBus(testhelper.DiscardLogger()))
 
 	userID := newUser(t, q, "leaver")
-
-	room, err := svc.Create(ctx, "Temp", userID)
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
+	room := newRoom(t, svc, "Temp", userID)
 
 	if err := svc.Leave(ctx, room.ID, userID); err != nil {
 		t.Fatalf("Leave: %v", err)
@@ -137,20 +132,14 @@ func TestCreate_PublishesRoomJoinedEvent(t *testing.T) {
 	if testPool == nil {
 		t.Skip("testcontainers not available")
 	}
-	ctx := context.Background()
-	q := testhelper.WithTx(t, testPool)
 	b := &testhelper.CaptureBus{}
-	svc := NewService(q, testhelper.DiscardLogger(), b)
+	svc, q := newSvc(t, b)
 
 	userID := newUser(t, q, "creator-pub")
-	_, err := svc.Create(ctx, "Pub Room", userID)
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
+	newRoom(t, svc, "Pub Room", userID)
 
-	events := b.EventsOfKind("room_join")
-	if len(events) != 1 {
-		t.Fatalf("expected 1 room_join event, got %d", len(events))
+	if len(b.EventsOfKind("room_join")) != 1 {
+		t.Errorf("expected 1 room_join event, got %d", len(b.EventsOfKind("room_join")))
 	}
 }
 
@@ -158,23 +147,19 @@ func TestJoin_PublishesRoomJoinedEvent(t *testing.T) {
 	if testPool == nil {
 		t.Skip("testcontainers not available")
 	}
-	ctx := context.Background()
-	q := testhelper.WithTx(t, testPool)
 	b := &testhelper.CaptureBus{}
-	svc := NewService(q, testhelper.DiscardLogger(), b)
+	svc, q := newSvc(t, b)
 
 	creatorID := newUser(t, q, "creator-j")
 	joinerID := newUser(t, q, "joiner-j")
-	room, _ := svc.Create(ctx, "Join Pub", creatorID)
-	b.EventsOfKind("room_join") // drain Create's event
+	room := newRoom(t, svc, "Join Pub", creatorID)
 
-	if err := svc.Join(ctx, room.ID, joinerID); err != nil {
+	if err := svc.Join(context.Background(), room.ID, joinerID); err != nil {
 		t.Fatalf("Join: %v", err)
 	}
 
-	events := b.EventsOfKind("room_join")
-	if len(events) != 2 { // Create + Join
-		t.Fatalf("expected 2 room_join events total, got %d", len(events))
+	if len(b.EventsOfKind("room_join")) != 2 { // Create + Join
+		t.Errorf("expected 2 room_join events, got %d", len(b.EventsOfKind("room_join")))
 	}
 }
 
@@ -182,43 +167,37 @@ func TestLeave_PublishesRoomLeftEvent(t *testing.T) {
 	if testPool == nil {
 		t.Skip("testcontainers not available")
 	}
-	ctx := context.Background()
-	q := testhelper.WithTx(t, testPool)
 	b := &testhelper.CaptureBus{}
-	svc := NewService(q, testhelper.DiscardLogger(), b)
+	svc, q := newSvc(t, b)
 
 	userID := newUser(t, q, "leaver-pub")
-	room, _ := svc.Create(ctx, "Leave Pub", userID)
+	room := newRoom(t, svc, "Leave Pub", userID)
 
-	if err := svc.Leave(ctx, room.ID, userID); err != nil {
+	if err := svc.Leave(context.Background(), room.ID, userID); err != nil {
 		t.Fatalf("Leave: %v", err)
 	}
 
-	events := b.EventsOfKind("room_leave")
-	if len(events) != 1 {
-		t.Fatalf("expected 1 room_leave event, got %d", len(events))
+	if len(b.EventsOfKind("room_leave")) != 1 {
+		t.Errorf("expected 1 room_leave event, got %d", len(b.EventsOfKind("room_leave")))
 	}
 }
 
-func TestSendRoomMessage_PublishesRoomMessageSentEvent(t *testing.T) {
+func TestSendRoomMessage_PublishesEvent(t *testing.T) {
 	if testPool == nil {
 		t.Skip("testcontainers not available")
 	}
-	ctx := context.Background()
-	q := testhelper.WithTx(t, testPool)
 	b := &testhelper.CaptureBus{}
-	svc := NewService(q, testhelper.DiscardLogger(), b)
+	svc, q := newSvc(t, b)
 
 	userID := newUser(t, q, "msg-pub")
-	room, _ := svc.Create(ctx, "Msg Pub", userID)
+	room := newRoom(t, svc, "Msg Pub", userID)
 
-	if _, err := svc.SendRoomMessage(ctx, room.ID, userID, "hello"); err != nil {
+	if _, err := svc.SendRoomMessage(context.Background(), room.ID, userID, "hello"); err != nil {
 		t.Fatalf("SendRoomMessage: %v", err)
 	}
 
-	events := b.EventsOfKind("room_message")
-	if len(events) != 1 {
-		t.Fatalf("expected 1 room_message event, got %d", len(events))
+	if len(b.EventsOfKind("room_message")) != 1 {
+		t.Errorf("expected 1 room_message event, got %d", len(b.EventsOfKind("room_message")))
 	}
 }
 
@@ -227,21 +206,15 @@ func TestSendRoomMessage_PersistsMessage(t *testing.T) {
 		t.Skip("testcontainers not available")
 	}
 	ctx := context.Background()
-	q := testhelper.WithTx(t, testPool)
-	svc := NewService(q, testhelper.DiscardLogger(), bus.NewBus(testhelper.DiscardLogger()))
+	svc, q := newSvc(t, bus.NewBus(testhelper.DiscardLogger()))
 
 	userID := newUser(t, q, "sender")
-
-	room, err := svc.Create(ctx, "Chat", userID)
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
+	room := newRoom(t, svc, "Chat", userID)
 
 	msg, err := svc.SendRoomMessage(ctx, room.ID, userID, "hello world")
 	if err != nil {
 		t.Fatalf("SendRoomMessage: %v", err)
 	}
-
 	if msg.Body != "hello world" {
 		t.Errorf("body: want %q, got %q", "hello world", msg.Body)
 	}
