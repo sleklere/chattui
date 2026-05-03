@@ -4,12 +4,30 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/bus"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/event"
 	dbstore "github.com/sleklere/realtime-chat/cmd/server/internal/store"
 )
+
+// FeedEntry is the domain representation of a single inbox feed row.
+type FeedEntry struct {
+	EntryType           string
+	Kind                string
+	SourceUserID        int64
+	SourceUsername      string
+	RefRoomID           *int64
+	RefRoomName         *string
+	RefConversationID   *int64
+	UnreadCount         int64
+	LastMessageBody     *string
+	LastMessageSenderID *int64
+	PeerID              int64
+	PeerUsername        string
+	CreatedAt           time.Time
+}
 
 // Store defines the persistence methods required by the inbox Service.
 type Store interface {
@@ -137,10 +155,43 @@ func (s *Service) handleDMSent(ctx context.Context, e event.Event) error {
 }
 
 // ListByUser returns the inbox feed for the given user up to the specified limit.
-func (s *Service) ListByUser(ctx context.Context, userID int64, limit int32) ([]dbstore.ListInboxFeedRow, error) {
+func (s *Service) ListByUser(ctx context.Context, userID int64, limit int32) ([]FeedEntry, error) {
 	rows, err := s.store.ListInboxFeed(ctx, dbstore.ListInboxFeedParams{UserID: userID, Lim: limit})
 	if err != nil {
-		return make([]dbstore.ListInboxFeedRow, 0), err
+		return nil, err
 	}
-	return rows, nil
+	entries := make([]FeedEntry, len(rows))
+	for i, row := range rows {
+		entries[i] = toFeedEntry(row)
+	}
+	return entries, nil
+}
+
+func toFeedEntry(row dbstore.ListInboxFeedRow) FeedEntry {
+	e := FeedEntry{
+		EntryType:      row.EntryType,
+		Kind:           row.Kind,
+		SourceUserID:   row.SourceUserID,
+		SourceUsername: row.SourceUsername,
+		UnreadCount:    row.UnreadCount,
+		PeerID:         row.PeerID,
+		PeerUsername:   row.PeerUsername,
+		CreatedAt:      row.CreatedAt.Time,
+	}
+	if row.RefRoomID.Valid {
+		e.RefRoomID = &row.RefRoomID.Int64
+	}
+	if row.RoomName.Valid {
+		e.RefRoomName = &row.RoomName.String
+	}
+	if row.RefConversationID.Valid {
+		e.RefConversationID = &row.RefConversationID.Int64
+	}
+	if row.LastMessageBody.Valid {
+		e.LastMessageBody = &row.LastMessageBody.String
+	}
+	if row.LastMessageSenderID.Valid {
+		e.LastMessageSenderID = &row.LastMessageSenderID.Int64
+	}
+	return e
 }

@@ -8,7 +8,6 @@ import (
 	"github.com/sleklere/realtime-chat/cmd/server/internal/auth"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/httpx"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/inbox"
-	dbstore "github.com/sleklere/realtime-chat/cmd/server/internal/store"
 )
 
 // InboxHandler handles inbox-related HTTP endpoints.
@@ -32,56 +31,40 @@ func (h *InboxHandler) List(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	res := make([]response.InboxRes, len(rows))
-	for i, row := range rows {
-		res[i] = toInboxRes(row)
+	for i, e := range rows {
+		res[i] = toInboxRes(e)
 	}
 	return httpx.JSON(w, http.StatusOK, res)
 }
 
-func toInboxRes(row dbstore.ListInboxFeedRow) response.InboxRes {
+func toInboxRes(e inbox.FeedEntry) response.InboxRes {
 	r := response.InboxRes{
-		EntryType: row.EntryType,
-		CreatedAt: row.CreatedAt.Time,
+		EntryType: e.EntryType,
+		CreatedAt: e.CreatedAt,
 	}
-
-	if row.EntryType == "event" {
-		r.Kind = row.Kind
-		r.SourceUser = &response.InboxUser{
-			ID:       row.SourceUserID,
-			Username: row.SourceUsername,
-		}
-		if row.RefRoomID.Valid && row.RoomName.Valid {
-			r.Room = &response.InboxRoom{
-				ID:   row.RefRoomID.Int64,
-				Name: row.RoomName.String,
-			}
+	if e.EntryType == "event" {
+		r.Kind = e.Kind
+		r.SourceUser = &response.InboxUser{ID: e.SourceUserID, Username: e.SourceUsername}
+		if e.RefRoomID != nil && e.RefRoomName != nil {
+			r.Room = &response.InboxRoom{ID: *e.RefRoomID, Name: *e.RefRoomName}
 		}
 		return r
 	}
-
 	// conversation entry
-	r.UnreadCount = row.UnreadCount
-	if row.RefConversationID.Valid {
-		convID := row.RefConversationID.Int64
-		r.RefConversationID = &convID
+	r.UnreadCount = e.UnreadCount
+	r.RefConversationID = e.RefConversationID
+	if e.RefRoomID != nil && e.RefRoomName != nil {
+		r.Room = &response.InboxRoom{ID: *e.RefRoomID, Name: *e.RefRoomName}
 	}
-	if row.RoomName.Valid {
-		r.Room = &response.InboxRoom{
-			ID:   row.RefRoomID.Int64,
-			Name: row.RoomName.String,
-		}
+	if e.PeerUsername != "" {
+		r.SourceUser = &response.InboxUser{ID: e.PeerID, Username: e.PeerUsername}
 	}
-	if row.PeerUsername != "" {
-		r.SourceUser = &response.InboxUser{
-			ID:       row.PeerID,
-			Username: row.PeerUsername,
+	if e.LastMessageBody != nil {
+		senderID := int64(0)
+		if e.LastMessageSenderID != nil {
+			senderID = *e.LastMessageSenderID
 		}
-	}
-	if row.LastMessageBody.Valid {
-		r.LastMessage = &response.InboxLastMessage{
-			Body:     row.LastMessageBody.String,
-			SenderID: row.LastMessageSenderID.Int64,
-		}
+		r.LastMessage = &response.InboxLastMessage{Body: *e.LastMessageBody, SenderID: senderID}
 	}
 	return r
 }
