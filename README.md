@@ -9,29 +9,15 @@ Terminal-based real-time chat app. Rooms, direct messages, and WebSocket-powered
 
 ## Getting started
 
-### Server (Docker — recommended)
+Requires Docker. No Go or PostgreSQL needed.
 
 ```bash
 cp .env.example .env   # set JWT_SECRET at minimum
-docker-compose up -d
+docker compose up -d --build           # PostgreSQL + server (migrations auto) on :8080
+docker compose run --rm client         # TUI client
 ```
 
-This starts PostgreSQL and the server (with migrations applied automatically) on port 8080.
-
-### Server (manual)
-
-```bash
-cp .env.example .env   # fill in DB_URL, PORT, JWT_SECRET
-docker-compose up -d postgres
-make migrate
-make run-server
-```
-
-### Client
-
-```bash
-make run-client
-```
+For local development against a running Go toolchain, see the `Makefile`.
 
 ## Features
 

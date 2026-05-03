@@ -28,5 +28,20 @@ services:
     ports:
       - "8080:8080"
 
+  # Run with: docker compose run --rm client
+  client:
+    build:
+      context: .
+      dockerfile: client.Dockerfile
+    profiles: ["client"]
+    depends_on:
+      server:
+        condition: service_started
+    stdin_open: true
+    tty: true
+    environment:
+      SERVER_URL: http://server:8080
+      WS_URL: ws://server:8080
+
 volumes:
   pgdata:
