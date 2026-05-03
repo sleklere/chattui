@@ -62,7 +62,7 @@ func NewPool(ctx context.Context) (*pgxpool.Pool, func(), error) {
 
 func runMigrations(pool *pgxpool.Pool) error {
 	db := stdlib.OpenDBFromPool(pool)
-	defer db.Close()
+	defer db.Close() //nolint:errcheck
 
 	goose.SetLogger(goose.NopLogger())
 	if err := goose.SetDialect("postgres"); err != nil {
@@ -111,12 +111,14 @@ type CaptureBus struct {
 	events []event.Event
 }
 
+// Publish records the event so tests can assert on it.
 func (b *CaptureBus) Publish(_ context.Context, e event.Event) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.events = append(b.events, e)
 }
 
+// Subscribe is a no-op; use EventsOfKind to inspect published events instead.
 func (b *CaptureBus) Subscribe(_ string, _ func(context.Context, event.Event) error) {}
 
 // EventsOfKind returns all captured events matching the given kind.
