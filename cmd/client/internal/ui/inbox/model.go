@@ -21,35 +21,43 @@ type LeaveInboxMsg struct{}
 // ShowDMsMsg signals that the user wants to navigate to the DMs screen.
 type ShowDMsMsg struct{}
 
-// ErrorMsg signals an error while loading inbox events.
+// ErrorMsg signals an error while loading inbox entries.
 type ErrorMsg struct {
 	Err error
 }
 
-type eventsLoadedMsg struct {
-	events []api.InboxEvent
+type entriesLoadedMsg struct {
+	entries []api.InboxEntry
 }
 
-type eventItem struct {
-	event api.InboxEvent
+type entryItem struct {
+	entry api.InboxEntry
 }
 
-func (i eventItem) FilterValue() string { return i.event.SourceUsername }
+func (i entryItem) FilterValue() string {
+	if i.entry.SourceUser != nil {
+		return i.entry.SourceUser.Username
+	}
+	if i.entry.Room != nil {
+		return i.entry.Room.Name
+	}
+	return ""
+}
 
-type eventItemDelegate struct{}
+type entryItemDelegate struct{}
 
-func (d eventItemDelegate) Height() int                             { return 2 }
-func (d eventItemDelegate) Spacing() int                            { return 0 }
-func (d eventItemDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
-func (d eventItemDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
-	i, ok := item.(eventItem)
+func (d entryItemDelegate) Height() int                             { return 2 }
+func (d entryItemDelegate) Spacing() int                            { return 0 }
+func (d entryItemDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
+func (d entryItemDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
+	i, ok := item.(entryItem)
 	if !ok {
 		return
 	}
 
 	t := theme.Current
-	line1 := formatEvent(i.event)
-	line2 := "  " + timeAgo(i.event.CreatedAt)
+	line1 := formatEntry(i.entry)
+	line2 := "  " + timeAgo(i.entry.CreatedAt)
 
 	if index == m.Index() {
 		mainStyle := lipgloss.NewStyle().Foreground(t.Accent).Bold(true)
@@ -63,15 +71,46 @@ func (d eventItemDelegate) Render(w io.Writer, m list.Model, index int, item lis
 	}
 }
 
-func formatEvent(e api.InboxEvent) string {
-	switch e.Kind {
-	case "room_join":
-		return fmt.Sprintf("%s joined room #%d", e.SourceUsername, e.RoomID)
-	case "room_leave":
-		return fmt.Sprintf("%s left room #%d", e.SourceUsername, e.RoomID)
-	default:
-		return fmt.Sprintf("%s: %s", e.Kind, e.SourceUsername)
+func formatEntry(e api.InboxEntry) string {
+	if e.EntryType == "event" {
+		username := ""
+		if e.SourceUser != nil {
+			username = e.SourceUser.Username
+		}
+		roomName := ""
+		if e.Room != nil {
+			roomName = "#" + e.Room.Name
+		}
+		switch e.Kind {
+		case "room_join":
+			return fmt.Sprintf("%s joined %s", username, roomName)
+		case "room_leave":
+			return fmt.Sprintf("%s left %s", username, roomName)
+		default:
+			return fmt.Sprintf("%s: %s", e.Kind, username)
+		}
 	}
+
+	// conversation entry
+	unread := ""
+	if e.UnreadCount > 0 {
+		unread = fmt.Sprintf(" (%d)", e.UnreadCount)
+	}
+	if e.Room != nil {
+		body := ""
+		if e.LastMessage != nil {
+			body = ": " + e.LastMessage.Body
+		}
+		return fmt.Sprintf("#%s%s%s", e.Room.Name, body, unread)
+	}
+	if e.SourceUser != nil {
+		body := ""
+		if e.LastMessage != nil {
+			body = ": " + e.LastMessage.Body
+		}
+		return fmt.Sprintf("DM %s%s%s", e.SourceUser.Username, body, unread)
+	}
+	return "conversation"
 }
 
 func timeAgo(t time.Time) string {
@@ -101,7 +140,7 @@ type Model struct {
 func New(apiClient *api.Client, width, height int) Model {
 	t := theme.Current
 
-	l := list.New([]list.Item{}, eventItemDelegate{}, width, height-6)
+	l := list.New([]list.Item{}, entryItemDelegate{}, width, height-6)
 	l.Title = "Inbox"
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(false)
@@ -122,7 +161,7 @@ func New(apiClient *api.Client, width, height int) Model {
 
 // Init initializes the inbox model.
 func (m Model) Init() tea.Cmd {
-	return m.fetchEvents()
+	return m.fetchEntries()
 }
 
 // Update handles messages for the inbox model.
@@ -137,13 +176,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		case "shift+tab":
 			return m, func() tea.Msg { return ShowDMsMsg{} }
 		case "r":
-			return m, m.fetchEvents()
+			return m, m.fetchEntries()
 		}
 
-	case eventsLoadedMsg:
-		items := make([]list.Item, len(msg.events))
-		for i, e := range msg.events {
-			items[i] = eventItem{event: e}
+	case entriesLoadedMsg:
+		items := make([]list.Item, len(msg.entries))
+		for i, e := range msg.entries {
+			items[i] = entryItem{entry: e}
 		}
 		m.list.SetItems(items)
 		return m, nil
@@ -186,12 +225,12 @@ func (m Model) View() string {
 	return b.String()
 }
 
-func (m Model) fetchEvents() tea.Cmd {
+func (m Model) fetchEntries() tea.Cmd {
 	return func() tea.Msg {
-		events, err := m.apiClient.GetInbox(50)
+		entries, err := m.apiClient.GetInbox(50)
 		if err != nil {
 			return ErrorMsg{Err: err}
 		}
-		return eventsLoadedMsg{events: events}
+		return entriesLoadedMsg{entries: entries}
 	}
 }

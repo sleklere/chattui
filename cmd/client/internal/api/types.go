@@ -53,15 +53,35 @@ type CreateRoomRequest struct {
 	Name string `json:"name"`
 }
 
-// InboxEvent represents an inbox event from the server.
-type InboxEvent struct {
-	ID             int64      `json:"id"`
-	Kind           string     `json:"kind"`
-	RoomID         int64      `json:"room_id"`
-	CreatedAt      time.Time  `json:"created_at"`
-	SourceUserID   int64      `json:"source_user_id"`
-	SourceUsername string     `json:"source_username"`
-	ReadAt         *time.Time `json:"read_at"`
+// InboxUser is a user referenced in an inbox entry.
+type InboxUser struct {
+	ID       int64  `json:"id"`
+	Username string `json:"username"`
+}
+
+// InboxRoom is a room referenced in an inbox entry.
+type InboxRoom struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
+// InboxLastMessage is the last message in a conversation/room cursor entry.
+type InboxLastMessage struct {
+	Body     string `json:"body"`
+	SenderID int64  `json:"sender_id"`
+}
+
+// InboxEntry represents a single inbox feed entry from the server.
+// EntryType is "event" (join/leave) or "conversation" (message cursor).
+type InboxEntry struct {
+	EntryType         string            `json:"entry_type"`
+	Kind              string            `json:"kind,omitempty"`
+	SourceUser        *InboxUser        `json:"source_user,omitempty"`
+	Room              *InboxRoom        `json:"room,omitempty"`
+	RefConversationID *int64            `json:"ref_conversation_id,omitempty"`
+	UnreadCount       int64             `json:"unread_count,omitempty"`
+	LastMessage       *InboxLastMessage `json:"last_message,omitempty"`
+	CreatedAt         time.Time         `json:"created_at"`
 }
 
 // Error represents a structured error response from the server.

@@ -38,8 +38,8 @@ func NewService(s Store, l *slog.Logger, b bus.Bus) *Service {
 	return &Service{store: s, logger: l, bus: b}
 }
 
-// Create creates a new room with the given name.
-func (s *Service) Create(ctx context.Context, name string) (dbstore.Room, error) {
+// Create creates a new room with the given name and adds the creator as a member.
+func (s *Service) Create(ctx context.Context, name string, creatorID int64) (dbstore.Room, error) {
 	slug := slugify(name)
 	room, err := s.store.CreateRoom(ctx, dbstore.CreateRoomParams{
 		Name: name,
@@ -48,6 +48,13 @@ func (s *Service) Create(ctx context.Context, name string) (dbstore.Room, error)
 	if err != nil {
 		return dbstore.Room{}, err
 	}
+
+	if err := s.store.JoinRoom(ctx, dbstore.JoinRoomParams{RoomID: room.ID, UserID: creatorID}); err != nil {
+		return dbstore.Room{}, err
+	}
+
+	s.bus.Publish(ctx, event.RoomJoinedEvent{RoomID: room.ID, UserID: creatorID})
+
 	return room, nil
 }
 

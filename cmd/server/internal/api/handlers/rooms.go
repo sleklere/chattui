@@ -39,7 +39,9 @@ func (h *RoomHandler) Create(w http.ResponseWriter, r *http.Request) error {
 		return httpx.BadRequest("missing_name", "room name is required", nil)
 	}
 
-	room, err := h.roomSvc.Create(r.Context(), req.Name)
+	claims, _ := auth.ClaimsFromCtx(r.Context())
+
+	room, err := h.roomSvc.Create(r.Context(), req.Name, claims.UserID)
 	if err != nil {
 		return err
 	}

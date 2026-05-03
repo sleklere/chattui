@@ -15,12 +15,16 @@ type Conversation struct {
 }
 
 type InboxConversation struct {
-	ID                int64
-	UserID            int64
-	RefRoomID         pgtype.Int8
-	RefConversationID pgtype.Int8
-	LastReadMessageID pgtype.Int8
-	CreatedAt         pgtype.Timestamptz
+	ID                  int64
+	UserID              int64
+	RefRoomID           pgtype.Int8
+	RefConversationID   pgtype.Int8
+	LastReadMessageID   pgtype.Int8
+	CreatedAt           pgtype.Timestamptz
+	LastMessageBody     pgtype.Text
+	LastMessageAt       pgtype.Timestamptz
+	LastMessageSenderID pgtype.Int8
+	UnreadCount         int32
 }
 
 type InboxEvent struct {

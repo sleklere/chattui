@@ -11,46 +11,94 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const findEventsByUserID = `-- name: FindEventsByUserID :many
-SELECT e.id, e.kind, e.room_id, e.created_at, source_user_id, u.username AS source_username, e.read_at
-FROM inbox_events e
-JOIN users u ON e.source_user_id = u.id
-WHERE e.user_id = $1
-ORDER BY e.created_at DESC LIMIT $2
+const listInboxFeed = `-- name: ListInboxFeed :many
+SELECT
+    'event'::text          AS entry_type,
+    ie.kind,
+    ie.source_user_id,
+    u.username             AS source_username,
+    ie.room_id             AS ref_room_id,
+    NULL::bigint           AS ref_conversation_id,
+    0::bigint              AS unread_count,
+    NULL::text             AS last_message_body,
+    NULL::bigint           AS last_message_sender_id,
+    r.name                 AS room_name,
+    0::bigint              AS peer_id,
+    ''::text               AS peer_username,
+    ie.created_at
+FROM inbox_events ie
+JOIN users u ON u.id = ie.source_user_id
+LEFT JOIN rooms r ON r.id = ie.room_id
+WHERE ie.user_id = $2
+UNION ALL
+SELECT
+    'conversation'::text   AS entry_type,
+    ''::text               AS kind,
+    0::bigint              AS source_user_id,
+    ''::text               AS source_username,
+    ic.ref_room_id,
+    ic.ref_conversation_id,
+    ic.unread_count::bigint,
+    ic.last_message_body,
+    ic.last_message_sender_id,
+    r.name                 AS room_name,
+    COALESCE(peer.id, 0)   AS peer_id,
+    COALESCE(peer.username, '') AS peer_username,
+    ic.last_message_at     AS created_at
+FROM inbox_conversations ic
+LEFT JOIN rooms r ON r.id = ic.ref_room_id
+LEFT JOIN conversations c ON c.id = ic.ref_conversation_id
+LEFT JOIN users peer ON peer.id = CASE WHEN c.user_a = $2::bigint THEN c.user_b ELSE c.user_a END
+WHERE ic.user_id = $2
+  AND ic.last_message_at IS NOT NULL
+ORDER BY created_at DESC
+LIMIT $1
 `
 
-type FindEventsByUserIDParams struct {
+type ListInboxFeedParams struct {
+	Lim    int32
 	UserID int64
-	Limit  int32
 }
 
-type FindEventsByUserIDRow struct {
-	ID             int64
-	Kind           string
-	RoomID         pgtype.Int8
-	CreatedAt      pgtype.Timestamptz
-	SourceUserID   int64
-	SourceUsername string
-	ReadAt         pgtype.Timestamptz
+type ListInboxFeedRow struct {
+	EntryType           string
+	Kind                string
+	SourceUserID        int64
+	SourceUsername      string
+	RefRoomID           pgtype.Int8
+	RefConversationID   pgtype.Int8
+	UnreadCount         int64
+	LastMessageBody     pgtype.Text
+	LastMessageSenderID pgtype.Int8
+	RoomName            pgtype.Text
+	PeerID              int64
+	PeerUsername        string
+	CreatedAt           pgtype.Timestamptz
 }
 
-func (q *Queries) FindEventsByUserID(ctx context.Context, arg FindEventsByUserIDParams) ([]FindEventsByUserIDRow, error) {
-	rows, err := q.db.Query(ctx, findEventsByUserID, arg.UserID, arg.Limit)
+func (q *Queries) ListInboxFeed(ctx context.Context, arg ListInboxFeedParams) ([]ListInboxFeedRow, error) {
+	rows, err := q.db.Query(ctx, listInboxFeed, arg.Lim, arg.UserID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []FindEventsByUserIDRow
+	var items []ListInboxFeedRow
 	for rows.Next() {
-		var i FindEventsByUserIDRow
+		var i ListInboxFeedRow
 		if err := rows.Scan(
-			&i.ID,
+			&i.EntryType,
 			&i.Kind,
-			&i.RoomID,
-			&i.CreatedAt,
 			&i.SourceUserID,
 			&i.SourceUsername,
-			&i.ReadAt,
+			&i.RefRoomID,
+			&i.RefConversationID,
+			&i.UnreadCount,
+			&i.LastMessageBody,
+			&i.LastMessageSenderID,
+			&i.RoomName,
+			&i.PeerID,
+			&i.PeerUsername,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -78,6 +126,48 @@ type SaveInboxRoomEventParams struct {
 
 func (q *Queries) SaveInboxRoomEvent(ctx context.Context, arg SaveInboxRoomEventParams) error {
 	_, err := q.db.Exec(ctx, saveInboxRoomEvent, arg.Kind, arg.RoomID, arg.SourceUserID)
+	return err
+}
+
+const updateInboxCursorOnDMMessage = `-- name: UpdateInboxCursorOnDMMessage :exec
+UPDATE inbox_conversations
+SET last_message_body      = $1,
+    last_message_at        = NOW(),
+    last_message_sender_id = $2,
+    unread_count           = unread_count + 1
+WHERE ref_conversation_id = $3
+  AND user_id != $2
+`
+
+type UpdateInboxCursorOnDMMessageParams struct {
+	Body           pgtype.Text
+	SenderID       pgtype.Int8
+	ConversationID pgtype.Int8
+}
+
+func (q *Queries) UpdateInboxCursorOnDMMessage(ctx context.Context, arg UpdateInboxCursorOnDMMessageParams) error {
+	_, err := q.db.Exec(ctx, updateInboxCursorOnDMMessage, arg.Body, arg.SenderID, arg.ConversationID)
+	return err
+}
+
+const updateInboxCursorOnRoomMessage = `-- name: UpdateInboxCursorOnRoomMessage :exec
+UPDATE inbox_conversations
+SET last_message_body      = $1,
+    last_message_at        = NOW(),
+    last_message_sender_id = $2,
+    unread_count           = unread_count + 1
+WHERE ref_room_id = $3
+  AND user_id != $2
+`
+
+type UpdateInboxCursorOnRoomMessageParams struct {
+	Body     pgtype.Text
+	SenderID pgtype.Int8
+	RoomID   pgtype.Int8
+}
+
+func (q *Queries) UpdateInboxCursorOnRoomMessage(ctx context.Context, arg UpdateInboxCursorOnRoomMessageParams) error {
+	_, err := q.db.Exec(ctx, updateInboxCursorOnRoomMessage, arg.Body, arg.SenderID, arg.RoomID)
 	return err
 }
 

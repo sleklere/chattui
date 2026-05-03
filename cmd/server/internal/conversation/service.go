@@ -72,5 +72,13 @@ func (s *Service) SendDirectMessage(ctx context.Context, senderID int64, toUserI
 		})
 	}
 
+	s.bus.Publish(ctx, event.DirectMessageSentEvent{
+		ConversationID: conv.ID,
+		SenderID:       senderID,
+		RecipientID:    toUserID,
+		MessageID:      msg.ID,
+		Body:           body,
+	})
+
 	return msg, nil
 }
