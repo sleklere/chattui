@@ -4,7 +4,7 @@ on:
   push:
 
 jobs:
-  test:
+  unit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4.2.2
@@ -13,4 +13,18 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - run: go test ./...
+      - run: go test -short ./...
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - uses: actions/setup-go@v5.4.0
+        with:
+          go-version-file: go.mod
+
+      - name: run integration tests
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+        run: go test ./cmd/server/internal/auth/... ./cmd/server/internal/room/...
