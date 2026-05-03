@@ -20,13 +20,16 @@ WHERE ref_room_id = @room_id
   AND user_id != @sender_id;
 
 -- name: UpdateInboxCursorOnDMMessage :exec
+-- Filtra por user_id con igualdad (en vez de != sender_id) para que el índice
+-- parcial inbox_conv_user_conv_uniq (user_id, ref_conversation_id) baje el B-tree
+-- directo. Filtrar por la secundaria con != en la leading column fuerza index scan.
 UPDATE inbox_conversations
 SET last_message_body      = @body,
     last_message_at        = NOW(),
     last_message_sender_id = @sender_id,
     unread_count           = unread_count + 1
-WHERE ref_conversation_id = @conversation_id
-  AND user_id != @sender_id;
+WHERE user_id = @recipient_id
+  AND ref_conversation_id = @conversation_id;
 
 -- name: ListInboxFeed :many
 SELECT

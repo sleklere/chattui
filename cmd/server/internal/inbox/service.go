@@ -147,6 +147,7 @@ func (s *Service) handleDMSent(ctx context.Context, e event.Event) error {
 	if err := s.store.UpdateInboxCursorOnDMMessage(ctx, dbstore.UpdateInboxCursorOnDMMessageParams{
 		Body:           pgtype.Text{String: msgEvent.Body, Valid: true},
 		SenderID:       pgtype.Int8{Int64: msgEvent.SenderID, Valid: true},
+		RecipientID:    msgEvent.RecipientID,
 		ConversationID: pgtype.Int8{Int64: msgEvent.ConversationID, Valid: true},
 	}); err != nil {
 		s.logger.Warn("inbox: failed to update dm cursor", "conversation_id", msgEvent.ConversationID, "error", err)

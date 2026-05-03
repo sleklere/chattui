@@ -135,18 +135,27 @@ SET last_message_body      = $1,
     last_message_at        = NOW(),
     last_message_sender_id = $2,
     unread_count           = unread_count + 1
-WHERE ref_conversation_id = $3
-  AND user_id != $2
+WHERE user_id = $3
+  AND ref_conversation_id = $4
 `
 
 type UpdateInboxCursorOnDMMessageParams struct {
 	Body           pgtype.Text
 	SenderID       pgtype.Int8
+	RecipientID    int64
 	ConversationID pgtype.Int8
 }
 
+// Filtra por user_id con igualdad (en vez de != sender_id) para que el índice
+// parcial inbox_conv_user_conv_uniq (user_id, ref_conversation_id) baje el B-tree
+// directo. Filtrar por la secundaria con != en la leading column fuerza index scan.
 func (q *Queries) UpdateInboxCursorOnDMMessage(ctx context.Context, arg UpdateInboxCursorOnDMMessageParams) error {
-	_, err := q.db.Exec(ctx, updateInboxCursorOnDMMessage, arg.Body, arg.SenderID, arg.ConversationID)
+	_, err := q.db.Exec(ctx, updateInboxCursorOnDMMessage,
+		arg.Body,
+		arg.SenderID,
+		arg.RecipientID,
+		arg.ConversationID,
+	)
 	return err
 }
 
