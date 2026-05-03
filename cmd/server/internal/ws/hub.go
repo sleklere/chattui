@@ -1,13 +1,27 @@
 package ws
 
 import (
+	"context"
 	"log/slog"
 
 	"github.com/coder/websocket"
 	"github.com/sleklere/realtime-chat/cmd/server/internal/bus"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/conversation"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/room"
+	dbstore "github.com/sleklere/realtime-chat/cmd/server/internal/store"
 )
+
+// roomSender is the only room.Service method a connected client actually calls.
+// Declaring the subset instead of depending on the full *room.Service keeps the
+// ws package decoupled from room internals and lets tests inject a lightweight
+// fake without spinning up a real DB.
+type roomSender interface {
+	SendRoomMessage(ctx context.Context, roomID, senderID int64, body string) (dbstore.Message, error)
+}
+
+// dmSender is the only conversation.Service method a connected client calls.
+// Same rationale as roomSender.
+type dmSender interface {
+	SendDirectMessage(ctx context.Context, senderID, toUserID int64, body string) (dbstore.Message, error)
+}
 
 // Client represents a single WebSocket connection.
 type Client struct {
@@ -19,8 +33,8 @@ type Client struct {
 	send     chan Message   // Hub writes here, WritePump drains
 
 	logger          *slog.Logger
-	roomSvc         *room.Service
-	conversationSvc *conversation.Service
+	roomSvc         roomSender
+	conversationSvc dmSender
 }
 
 // Hub is the central message broker.

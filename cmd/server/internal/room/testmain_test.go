@@ -2,6 +2,7 @@ package room
 
 import (
 	"context"
+	"flag"
 	"os"
 	"testing"
 
@@ -12,6 +13,9 @@ import (
 var testPool *pgxpool.Pool
 
 func TestMain(m *testing.M) {
+	// flag.Parse must be called before testing.Short() in TestMain;
+	// m.Run() would do it later but we need Short() here first.
+	flag.Parse()
 	if testing.Short() {
 		os.Exit(m.Run())
 	}

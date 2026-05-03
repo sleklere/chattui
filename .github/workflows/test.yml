@@ -4,6 +4,26 @@ on:
   push:
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - uses: actions/setup-go@v5.4.0
+        with:
+          go-version-file: go.mod
+
+      - name: gofmt
+        run: test -z "$(gofmt -l .)"
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+
   unit:
     runs-on: ubuntu-latest
     steps:
@@ -27,4 +47,4 @@ jobs:
       - name: run integration tests
         env:
           TESTCONTAINERS_RYUK_DISABLED: "true"
-        run: go test ./cmd/server/internal/auth/... ./cmd/server/internal/room/...
+        run: go test ./cmd/server/internal/auth/... ./cmd/server/internal/room/... ./cmd/server/internal/inbox/...

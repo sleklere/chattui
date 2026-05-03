@@ -8,14 +8,17 @@ import (
 	"log/slog"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
+	"github.com/sleklere/realtime-chat/cmd/server/internal/event"
+	dbstore "github.com/sleklere/realtime-chat/cmd/server/internal/store"
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
-	dbstore "github.com/sleklere/realtime-chat/cmd/server/internal/store"
 )
 
 // NewPool starts a Postgres container, runs migrations, and returns a pool and a cleanup func.
@@ -85,6 +88,48 @@ func WithTx(t *testing.T, pool *pgxpool.Pool) *dbstore.Queries {
 	}
 	t.Cleanup(func() { _ = tx.Rollback(ctx) })
 	return dbstore.New(tx)
+}
+
+// NewTx begins a transaction that rolls back when the test ends.
+// Returns the raw pgx.Tx so tests can run arbitrary SQL for verification,
+// and a *dbstore.Queries backed by the same transaction.
+func NewTx(t *testing.T, pool *pgxpool.Pool) (pgx.Tx, *dbstore.Queries) {
+	t.Helper()
+	ctx := context.Background()
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin tx: %v", err)
+	}
+	t.Cleanup(func() { _ = tx.Rollback(ctx) })
+	return tx, dbstore.New(tx)
+}
+
+// CaptureBus is a bus.Bus implementation that records every published event.
+// Subscribe is a no-op — use it when you want to call service handlers directly.
+type CaptureBus struct {
+	mu     sync.Mutex
+	events []event.Event
+}
+
+func (b *CaptureBus) Publish(_ context.Context, e event.Event) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.events = append(b.events, e)
+}
+
+func (b *CaptureBus) Subscribe(_ string, _ func(context.Context, event.Event) error) {}
+
+// EventsOfKind returns all captured events matching the given kind.
+func (b *CaptureBus) EventsOfKind(kind string) []event.Event {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	var out []event.Event
+	for _, e := range b.events {
+		if e.Kind() == kind {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // DiscardLogger returns a no-op slog logger.

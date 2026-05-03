@@ -6,12 +6,10 @@ import (
 	"log/slog"
 
 	"github.com/coder/websocket"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/conversation"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/room"
 )
 
 // NewClient creates a new Client ready to be registered with the Hub.
-func NewClient(hub *Hub, conn *websocket.Conn, roomSvc *room.Service, conversationSvc *conversation.Service, userID int64, username string, roomIDs map[int64]bool, logger *slog.Logger) *Client {
+func NewClient(hub *Hub, conn *websocket.Conn, roomSvc roomSender, conversationSvc dmSender, userID int64, username string, roomIDs map[int64]bool, logger *slog.Logger) *Client {
 	return &Client{
 		hub:             hub,
 		conn:            conn,
@@ -109,9 +107,9 @@ func (c *Client) dispatchRoomMessage(ctx context.Context, msg Message) {
 	)
 	if err != nil {
 		c.logger.Warn("failed to persist room message", "error", err)
-	} else {
-		roomMsgPayload.MessageID = dbMsg.ID
+		return
 	}
+	roomMsgPayload.MessageID = dbMsg.ID
 
 	completePayload, err := json.Marshal(roomMsgPayload)
 	if err != nil {
@@ -148,8 +146,8 @@ func (c *Client) dispatchDirectMessage(ctx context.Context, msg Message) {
 	)
 	if err != nil {
 		c.logger.Warn("failed to persist dm message", "error", err)
+		return
 	}
-
 	directMsgPayload.MessageID = dbMsg.ID
 
 	completePayload, err := json.Marshal(directMsgPayload)
