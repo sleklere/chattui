@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	dbstore "github.com/sleklere/realtime-chat/cmd/server/internal/store"
+	dbstore "github.com/sleklere/chattui/cmd/server/internal/store"
 )
 
 var testCfg = &Config{

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sleklere/realtime-chat/cmd/server/internal/testhelper"
+	"github.com/sleklere/chattui/cmd/server/internal/testhelper"
 )
 
 func integrationAuthCfg() *Config {

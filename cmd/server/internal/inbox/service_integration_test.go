@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sleklere/realtime-chat/cmd/server/internal/event"
-	dbstore "github.com/sleklere/realtime-chat/cmd/server/internal/store"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/testhelper"
+	"github.com/sleklere/chattui/cmd/server/internal/event"
+	dbstore "github.com/sleklere/chattui/cmd/server/internal/store"
+	"github.com/sleklere/chattui/cmd/server/internal/testhelper"
 )
 
 // setup creates two users, a room, and adds both as room_members.

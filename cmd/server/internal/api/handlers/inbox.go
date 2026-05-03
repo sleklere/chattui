@@ -4,10 +4,10 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/sleklere/realtime-chat/cmd/server/internal/api/dto/response"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/auth"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/httpx"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/inbox"
+	"github.com/sleklere/chattui/cmd/server/internal/api/dto/response"
+	"github.com/sleklere/chattui/cmd/server/internal/auth"
+	"github.com/sleklere/chattui/cmd/server/internal/httpx"
+	"github.com/sleklere/chattui/cmd/server/internal/inbox"
 )
 
 // InboxHandler handles inbox-related HTTP endpoints.

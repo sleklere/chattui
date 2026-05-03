@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/bus"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/event"
-	dbstore "github.com/sleklere/realtime-chat/cmd/server/internal/store"
+	"github.com/sleklere/chattui/cmd/server/internal/bus"
+	"github.com/sleklere/chattui/cmd/server/internal/event"
+	dbstore "github.com/sleklere/chattui/cmd/server/internal/store"
 )
 
 // FeedEntry is the domain representation of a single inbox feed row.

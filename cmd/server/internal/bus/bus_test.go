@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sleklere/realtime-chat/cmd/server/internal/event"
+	"github.com/sleklere/chattui/cmd/server/internal/event"
 )
 
 func noopLogger() *slog.Logger {

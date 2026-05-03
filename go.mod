@@ -1,4 +1,4 @@
-module github.com/sleklere/realtime-chat
+module github.com/sleklere/chattui
 
 go 1.26.1
 

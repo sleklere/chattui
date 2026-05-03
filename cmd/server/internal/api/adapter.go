@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/auth"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/httpx"
+	"github.com/sleklere/chattui/cmd/server/internal/auth"
+	"github.com/sleklere/chattui/cmd/server/internal/httpx"
 )
 
 // AppHandler is a handler that returns an error

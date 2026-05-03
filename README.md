@@ -1,4 +1,4 @@
-# realtime-chat
+# chattui
 
 Terminal-based real-time chat app. Rooms, direct messages, and WebSocket-powered messaging — all in the terminal.
 

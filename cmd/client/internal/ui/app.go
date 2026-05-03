@@ -6,15 +6,15 @@ import (
 	"log/slog"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/sleklere/realtime-chat/cmd/client/internal/api"
-	"github.com/sleklere/realtime-chat/cmd/client/internal/config"
-	"github.com/sleklere/realtime-chat/cmd/client/internal/ui/auth"
-	"github.com/sleklere/realtime-chat/cmd/client/internal/ui/chat"
-	"github.com/sleklere/realtime-chat/cmd/client/internal/ui/dm"
-	"github.com/sleklere/realtime-chat/cmd/client/internal/ui/dmchat"
-	"github.com/sleklere/realtime-chat/cmd/client/internal/ui/inbox"
-	"github.com/sleklere/realtime-chat/cmd/client/internal/ui/rooms"
-	"github.com/sleklere/realtime-chat/cmd/client/internal/ws"
+	"github.com/sleklere/chattui/cmd/client/internal/api"
+	"github.com/sleklere/chattui/cmd/client/internal/config"
+	"github.com/sleklere/chattui/cmd/client/internal/ui/auth"
+	"github.com/sleklere/chattui/cmd/client/internal/ui/chat"
+	"github.com/sleklere/chattui/cmd/client/internal/ui/dm"
+	"github.com/sleklere/chattui/cmd/client/internal/ui/dmchat"
+	"github.com/sleklere/chattui/cmd/client/internal/ui/inbox"
+	"github.com/sleklere/chattui/cmd/client/internal/ui/rooms"
+	"github.com/sleklere/chattui/cmd/client/internal/ws"
 )
 
 type wsConnectedMsg struct {

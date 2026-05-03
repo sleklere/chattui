@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sleklere/realtime-chat/cmd/server/internal/bus"
-	dbstore "github.com/sleklere/realtime-chat/cmd/server/internal/store"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/testhelper"
+	"github.com/sleklere/chattui/cmd/server/internal/bus"
+	dbstore "github.com/sleklere/chattui/cmd/server/internal/store"
+	"github.com/sleklere/chattui/cmd/server/internal/testhelper"
 )
 
 // newSvc creates a Service wired to testPool.

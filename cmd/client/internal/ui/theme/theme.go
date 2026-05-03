@@ -92,13 +92,13 @@ func RosePine() Theme {
 // Names returns the list of available theme names.
 var Names = []string{"catppuccin", "rose-pine", "kanagawa"}
 
-// configPath returns ~/.config/realtime-chat/theme.
+// configPath returns ~/.config/chattui/theme.
 func configPath() string {
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		dir = filepath.Join(os.Getenv("HOME"), ".config")
 	}
-	return filepath.Join(dir, "realtime-chat", "theme")
+	return filepath.Join(dir, "chattui", "theme")
 }
 
 // Load reads the saved theme from disk and applies it. Falls back to env/default.

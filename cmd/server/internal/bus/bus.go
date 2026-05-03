@@ -5,7 +5,7 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/sleklere/realtime-chat/cmd/server/internal/event"
+	"github.com/sleklere/chattui/cmd/server/internal/event"
 )
 
 const queueChanSize = 512

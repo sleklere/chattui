@@ -1,4 +1,4 @@
-// Package main is the entry point for the realtime-chat client.
+// Package main is the entry point for the chattui client.
 package main
 
 import (
@@ -7,9 +7,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/joho/godotenv"
-	"github.com/sleklere/realtime-chat/cmd/client/internal/config"
-	"github.com/sleklere/realtime-chat/cmd/client/internal/ui"
-	"github.com/sleklere/realtime-chat/cmd/client/internal/ui/theme"
+	"github.com/sleklere/chattui/cmd/client/internal/config"
+	"github.com/sleklere/chattui/cmd/client/internal/ui"
+	"github.com/sleklere/chattui/cmd/client/internal/ui/theme"
 )
 
 func main() {

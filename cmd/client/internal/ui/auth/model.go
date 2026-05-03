@@ -8,8 +8,8 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/sleklere/realtime-chat/cmd/client/internal/api"
-	"github.com/sleklere/realtime-chat/cmd/client/internal/ui/theme"
+	"github.com/sleklere/chattui/cmd/client/internal/api"
+	"github.com/sleklere/chattui/cmd/client/internal/ui/theme"
 )
 
 type mode int
@@ -140,7 +140,7 @@ func (m Model) View() string {
 
 	var b strings.Builder
 
-	b.WriteString(brandStyle.Render("realtime-chat"))
+	b.WriteString(brandStyle.Render("chattui"))
 	b.WriteString("\n\n")
 	b.WriteString(titleStyle.Render(title))
 	b.WriteString("\n\n")

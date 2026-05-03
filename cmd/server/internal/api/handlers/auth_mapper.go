@@ -1,8 +1,8 @@
 package handlers
 
 import (
-	"github.com/sleklere/realtime-chat/cmd/server/internal/api/dto/response"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/auth"
+	"github.com/sleklere/chattui/cmd/server/internal/api/dto/response"
+	"github.com/sleklere/chattui/cmd/server/internal/auth"
 )
 
 func authResultToRes(r auth.Result) response.AuthRes {

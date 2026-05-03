@@ -5,8 +5,8 @@ import (
 	"log/slog"
 
 	"github.com/coder/websocket"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/bus"
-	dbstore "github.com/sleklere/realtime-chat/cmd/server/internal/store"
+	"github.com/sleklere/chattui/cmd/server/internal/bus"
+	dbstore "github.com/sleklere/chattui/cmd/server/internal/store"
 )
 
 // roomSender is the only room.Service method a connected client actually calls.

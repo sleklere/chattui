@@ -6,13 +6,13 @@ import (
 	"log/slog"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/api/handlers"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/auth"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/conversation"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/inbox"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/room"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/user"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/ws"
+	"github.com/sleklere/chattui/cmd/server/internal/api/handlers"
+	"github.com/sleklere/chattui/cmd/server/internal/auth"
+	"github.com/sleklere/chattui/cmd/server/internal/conversation"
+	"github.com/sleklere/chattui/cmd/server/internal/inbox"
+	"github.com/sleklere/chattui/cmd/server/internal/room"
+	"github.com/sleklere/chattui/cmd/server/internal/user"
+	"github.com/sleklere/chattui/cmd/server/internal/ws"
 )
 
 // API defines the HTTP API layer with logger and services used by handlers

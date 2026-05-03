@@ -8,13 +8,13 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
-	reqdto "github.com/sleklere/realtime-chat/cmd/server/internal/api/dto/request"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/api/dto/response"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/auth"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/errs"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/httpx"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/room"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/ws"
+	reqdto "github.com/sleklere/chattui/cmd/server/internal/api/dto/request"
+	"github.com/sleklere/chattui/cmd/server/internal/api/dto/response"
+	"github.com/sleklere/chattui/cmd/server/internal/auth"
+	"github.com/sleklere/chattui/cmd/server/internal/errs"
+	"github.com/sleklere/chattui/cmd/server/internal/httpx"
+	"github.com/sleklere/chattui/cmd/server/internal/room"
+	"github.com/sleklere/chattui/cmd/server/internal/ws"
 )
 
 // RoomHandler handles room-related HTTP requests.

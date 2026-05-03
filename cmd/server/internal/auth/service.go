@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	dbstore "github.com/sleklere/realtime-chat/cmd/server/internal/store"
+	dbstore "github.com/sleklere/chattui/cmd/server/internal/store"
 	"golang.org/x/crypto/bcrypt"
 )
 

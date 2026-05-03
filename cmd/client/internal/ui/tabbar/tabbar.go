@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/sleklere/realtime-chat/cmd/client/internal/ui/theme"
+	"github.com/sleklere/chattui/cmd/client/internal/ui/theme"
 )
 
 // Render returns a styled tab bar string with the active tab highlighted.

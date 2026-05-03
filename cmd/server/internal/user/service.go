@@ -7,8 +7,8 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/errs"
-	dbstore "github.com/sleklere/realtime-chat/cmd/server/internal/store"
+	"github.com/sleklere/chattui/cmd/server/internal/errs"
+	dbstore "github.com/sleklere/chattui/cmd/server/internal/store"
 )
 
 // Store defines the persistence methods required by the user Service.

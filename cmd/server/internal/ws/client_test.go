@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	dbstore "github.com/sleklere/realtime-chat/cmd/server/internal/store"
+	dbstore "github.com/sleklere/chattui/cmd/server/internal/store"
 )
 
 // failingRoomSvc implements roomSender and always returns an error.

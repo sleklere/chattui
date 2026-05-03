@@ -10,9 +10,9 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/sleklere/realtime-chat/cmd/client/internal/api"
-	"github.com/sleklere/realtime-chat/cmd/client/internal/ui/tabbar"
-	"github.com/sleklere/realtime-chat/cmd/client/internal/ui/theme"
+	"github.com/sleklere/chattui/cmd/client/internal/api"
+	"github.com/sleklere/chattui/cmd/client/internal/ui/tabbar"
+	"github.com/sleklere/chattui/cmd/client/internal/ui/theme"
 )
 
 // ConvSelectedMsg signals that an existing conversation was selected.

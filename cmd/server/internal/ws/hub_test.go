@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sleklere/realtime-chat/cmd/server/internal/bus"
+	"github.com/sleklere/chattui/cmd/server/internal/bus"
 )
 
 // ---------------------------------------------------------------------------

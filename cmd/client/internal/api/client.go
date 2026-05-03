@@ -1,4 +1,4 @@
-// Package api provides an HTTP client for the realtime-chat server API.
+// Package api provides an HTTP client for the chattui server API.
 package api
 
 import (

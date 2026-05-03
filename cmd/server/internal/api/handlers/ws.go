@@ -8,11 +8,11 @@ import (
 	"strings"
 
 	"github.com/coder/websocket"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/auth"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/conversation"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/httpx"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/room"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/ws"
+	"github.com/sleklere/chattui/cmd/server/internal/auth"
+	"github.com/sleklere/chattui/cmd/server/internal/conversation"
+	"github.com/sleklere/chattui/cmd/server/internal/httpx"
+	"github.com/sleklere/chattui/cmd/server/internal/room"
+	"github.com/sleklere/chattui/cmd/server/internal/ws"
 )
 
 // WSHandler handles WebSocket upgrade requests.

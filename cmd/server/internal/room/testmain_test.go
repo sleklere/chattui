@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/testhelper"
+	"github.com/sleklere/chattui/cmd/server/internal/testhelper"
 )
 
 var testPool *pgxpool.Pool

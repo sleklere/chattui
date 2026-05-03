@@ -11,9 +11,9 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/sleklere/realtime-chat/cmd/client/internal/api"
-	"github.com/sleklere/realtime-chat/cmd/client/internal/ui/theme"
-	"github.com/sleklere/realtime-chat/cmd/client/internal/ws"
+	"github.com/sleklere/chattui/cmd/client/internal/api"
+	"github.com/sleklere/chattui/cmd/client/internal/ui/theme"
+	"github.com/sleklere/chattui/cmd/client/internal/ws"
 )
 
 // LeaveRoomMsg signals that the user wants to leave the current room.

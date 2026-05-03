@@ -5,10 +5,10 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/sleklere/realtime-chat/cmd/server/internal/api/dto/response"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/errs"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/httpx"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/user"
+	"github.com/sleklere/chattui/cmd/server/internal/api/dto/response"
+	"github.com/sleklere/chattui/cmd/server/internal/errs"
+	"github.com/sleklere/chattui/cmd/server/internal/httpx"
+	"github.com/sleklere/chattui/cmd/server/internal/user"
 )
 
 // UserHandler handles user-related HTTP requests.

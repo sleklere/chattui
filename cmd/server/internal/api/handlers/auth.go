@@ -8,9 +8,9 @@ import (
 	"log/slog"
 	"net/http"
 
-	reqdto "github.com/sleklere/realtime-chat/cmd/server/internal/api/dto/request"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/auth"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/httpx"
+	reqdto "github.com/sleklere/chattui/cmd/server/internal/api/dto/request"
+	"github.com/sleklere/chattui/cmd/server/internal/auth"
+	"github.com/sleklere/chattui/cmd/server/internal/httpx"
 )
 
 // AuthHandler handles authentication-related HTTP requests.

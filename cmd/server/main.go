@@ -12,17 +12,17 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/api"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/api/handlers"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/auth"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/bus"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/conversation"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/db"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/inbox"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/room"
-	dbstore "github.com/sleklere/realtime-chat/cmd/server/internal/store"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/user"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/ws"
+	"github.com/sleklere/chattui/cmd/server/internal/api"
+	"github.com/sleklere/chattui/cmd/server/internal/api/handlers"
+	"github.com/sleklere/chattui/cmd/server/internal/auth"
+	"github.com/sleklere/chattui/cmd/server/internal/bus"
+	"github.com/sleklere/chattui/cmd/server/internal/conversation"
+	"github.com/sleklere/chattui/cmd/server/internal/db"
+	"github.com/sleklere/chattui/cmd/server/internal/inbox"
+	"github.com/sleklere/chattui/cmd/server/internal/room"
+	dbstore "github.com/sleklere/chattui/cmd/server/internal/store"
+	"github.com/sleklere/chattui/cmd/server/internal/user"
+	"github.com/sleklere/chattui/cmd/server/internal/ws"
 )
 
 func main() {
@@ -56,7 +56,7 @@ func main() {
 
 	authCfg := &auth.Config{
 		JWTSecret: []byte(jwtSecret),
-		Issuer:    "realtime-chat",
+		Issuer:    "chattui",
 		AccessTTL: 15 * time.Minute,
 	}
 

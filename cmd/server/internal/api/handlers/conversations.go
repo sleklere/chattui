@@ -6,10 +6,10 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/api/dto/response"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/auth"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/conversation"
-	"github.com/sleklere/realtime-chat/cmd/server/internal/httpx"
+	"github.com/sleklere/chattui/cmd/server/internal/api/dto/response"
+	"github.com/sleklere/chattui/cmd/server/internal/auth"
+	"github.com/sleklere/chattui/cmd/server/internal/conversation"
+	"github.com/sleklere/chattui/cmd/server/internal/httpx"
 )
 
 // ConversationHandler handles conversation-related HTTP requests.
