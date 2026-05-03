@@ -16,12 +16,18 @@ jobs:
       - name: gofmt
         run: test -z "$(gofmt -l .)"
 
-      - name: go vet
-        run: go vet ./...
+      - name: cache golangci-lint analysis
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/golangci-lint
+          key: golangci-lint-${{ runner.os }}-${{ hashFiles('**/go.sum', '.golangci.yml') }}
+          restore-keys: |
+            golangci-lint-${{ runner.os }}-
 
       - name: golangci-lint
         # go install compiles from source with the current Go toolchain, avoiding
         # pre-built binary incompatibility with newer Go versions.
+        # govet runs inside golangci-lint, so no separate `go vet` step is needed.
         run: |
           go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
           golangci-lint run ./...
