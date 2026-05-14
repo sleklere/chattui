@@ -3,6 +3,7 @@ package ui
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -42,6 +43,8 @@ type AppState struct {
 	UserID      int64
 	Username    string
 	CurrentRoom *dto.Room
+	RoomBadges  map[int64]int64 // roomID → unread
+	ConvBadges  map[int64]int64 // convID → unread
 }
 
 // App is the top-level Bubble Tea model that manages screen transitions.
@@ -84,6 +87,39 @@ func (a *App) Init() tea.Cmd {
 
 // Update handles messages for the app model.
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Intercept inbox_updated WS events to keep badges in sync regardless of active screen.
+	if wsMsg, ok := msg.(ws.IncomingMsg); ok && wsMsg.Message.Type == ws.TypeInboxUpdated {
+		var payload ws.InboxUpdatedPayload
+		if err := json.Unmarshal(wsMsg.Message.Payload, &payload); err == nil {
+			if a.state.RoomBadges == nil {
+				a.state.RoomBadges = make(map[int64]int64)
+			}
+			if a.state.ConvBadges == nil {
+				a.state.ConvBadges = make(map[int64]int64)
+			}
+			if payload.RefRoomID != nil {
+				a.state.RoomBadges[*payload.RefRoomID] = payload.UnreadCount
+				if a.active == screenRooms {
+					rid, cnt := *payload.RefRoomID, payload.UnreadCount
+					total := a.badgeTotal()
+					var activeCmd tea.Cmd
+					a.rooms, activeCmd = a.rooms.Update(rooms.RoomBadgeUpdateMsg{RoomID: rid, Count: cnt, Total: total})
+					return a, activeCmd
+				}
+			}
+			if payload.RefConversationID != nil {
+				a.state.ConvBadges[*payload.RefConversationID] = payload.UnreadCount
+				if a.active == screenDM {
+					cid, cnt := *payload.RefConversationID, payload.UnreadCount
+					total := a.badgeTotal()
+					var activeCmd tea.Cmd
+					a.dm, activeCmd = a.dm.Update(dm.ConvBadgeUpdateMsg{ConvID: cid, Count: cnt, Total: total})
+					return a, activeCmd
+				}
+			}
+		}
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
@@ -103,13 +139,31 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.state.Username = msg.Username
 		a.state.APIClient.SetToken(msg.Token)
 		a.state.Logger.Info("authenticated", "user_id", msg.UserID, "username", msg.Username)
+		a.state.RoomBadges = make(map[int64]int64)
+		a.state.ConvBadges = make(map[int64]int64)
 		a.active = screenRooms
-		a.rooms = rooms.New(a.state.APIClient, a.width, a.height)
-		return a, tea.Batch(a.rooms.Init(), a.connectWS())
+		a.rooms = rooms.New(a.state.APIClient, a.state.RoomBadges, a.badgeTotal(), a.width, a.height)
+		return a, tea.Batch(a.rooms.Init(), a.connectWS(), inbox.FetchBadgesCmd(a.state.APIClient))
 
 	case wsConnectedMsg:
 		a.wsClient = msg.client
 		a.state.Logger.Info("websocket connected at app level")
+		return a, nil
+
+	case inbox.BadgesMsg:
+		a.state.RoomBadges = msg.RoomBadges
+		a.state.ConvBadges = msg.ConvBadges
+		total := a.badgeTotal()
+		switch a.active {
+		case screenRooms:
+			var cmd tea.Cmd
+			a.rooms, cmd = a.rooms.Update(rooms.RefreshBadgesMsg{Badges: msg.RoomBadges, InboxTotal: total})
+			return a, cmd
+		case screenDM:
+			var cmd tea.Cmd
+			a.dm, cmd = a.dm.Update(dm.RefreshBadgesMsg{Badges: msg.ConvBadges, InboxTotal: total})
+			return a, cmd
+		}
 		return a, nil
 
 	case rooms.RoomSelectedMsg:
@@ -132,12 +186,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.state.Logger.Info("left room", "room_id", a.state.CurrentRoom.ID)
 		a.state.CurrentRoom = nil
 		a.active = screenRooms
-		a.rooms = rooms.New(a.state.APIClient, a.width, a.height)
+		a.rooms = rooms.New(a.state.APIClient, a.state.RoomBadges, a.badgeTotal(), a.width, a.height)
 		return a, a.rooms.Init()
 
 	case rooms.ShowDMsMsg:
 		a.active = screenDM
-		a.dm = dm.New(a.state.APIClient, a.width, a.height)
+		a.dm = dm.New(a.state.APIClient, a.state.ConvBadges, a.badgeTotal(), a.width, a.height)
 		return a, a.dm.Init()
 
 	case dm.ConvSelectedMsg:
@@ -174,27 +228,27 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case dm.LeaveDMListMsg:
 		a.active = screenRooms
-		a.rooms = rooms.New(a.state.APIClient, a.width, a.height)
+		a.rooms = rooms.New(a.state.APIClient, a.state.RoomBadges, a.badgeTotal(), a.width, a.height)
 		return a, a.rooms.Init()
 
 	case dmchat.LeaveDMMsg:
 		a.active = screenDM
-		a.dm = dm.New(a.state.APIClient, a.width, a.height)
+		a.dm = dm.New(a.state.APIClient, a.state.ConvBadges, a.badgeTotal(), a.width, a.height)
 		return a, a.dm.Init()
 
 	case rooms.ShowInboxMsg, dm.ShowInboxMsg:
 		a.active = screenInbox
-		a.inbox = inbox.New(a.state.APIClient, a.width, a.height)
+		a.inbox = inbox.New(a.state.APIClient, a.badgeTotal(), a.width, a.height)
 		return a, a.inbox.Init()
 
 	case inbox.LeaveInboxMsg:
 		a.active = screenRooms
-		a.rooms = rooms.New(a.state.APIClient, a.width, a.height)
+		a.rooms = rooms.New(a.state.APIClient, a.state.RoomBadges, a.badgeTotal(), a.width, a.height)
 		return a, a.rooms.Init()
 
 	case inbox.ShowDMsMsg:
 		a.active = screenDM
-		a.dm = dm.New(a.state.APIClient, a.width, a.height)
+		a.dm = dm.New(a.state.APIClient, a.state.ConvBadges, a.badgeTotal(), a.width, a.height)
 		return a, a.dm.Init()
 
 	case inbox.OpenRoomMsg:
@@ -277,6 +331,17 @@ func (a *App) View() string {
 		return a.inbox.View()
 	}
 	return ""
+}
+
+func (a *App) badgeTotal() int64 {
+	var total int64
+	for _, v := range a.state.RoomBadges {
+		total += v
+	}
+	for _, v := range a.state.ConvBadges {
+		total += v
+	}
+	return total
 }
 
 func (a *App) connectWS() tea.Cmd {

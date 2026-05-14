@@ -43,6 +43,12 @@ type ErrorMsg struct {
 	Err error
 }
 
+// BadgesMsg carries unread counts for all rooms and conversations.
+type BadgesMsg struct {
+	RoomBadges map[int64]int64
+	ConvBadges map[int64]int64
+}
+
 type entriesLoadedMsg struct {
 	entries []dto.InboxFeed
 }
@@ -146,15 +152,17 @@ func timeAgo(t time.Time) string {
 
 // Model is the Bubble Tea model for the inbox screen.
 type Model struct {
-	apiClient *api.Client
-	list      list.Model
-	err       string
-	width     int
-	height    int
+	apiClient  *api.Client
+	list       list.Model
+	roomsTotal int64
+	dmsTotal   int64
+	err        string
+	width      int
+	height     int
 }
 
 // New creates a new inbox Model.
-func New(apiClient *api.Client, width, height int) Model {
+func New(apiClient *api.Client, _ int64, width, height int) Model {
 	t := theme.Current
 
 	l := list.New([]list.Item{}, entryItemDelegate{}, width, height-6)
@@ -206,6 +214,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			if err := json.Unmarshal(msg.Message.Payload, &p); err == nil {
 				entry := inboxEntryFromPayload(p)
 				m.list.SetItems(upsertEntry(m.list.Items(), entry))
+				badges := computeBadges(m.list.Items())
+				m.roomsTotal = badges.RoomsTotal()
+				m.dmsTotal = badges.DmsTotal()
+				return m, func() tea.Msg { return badges }
 			}
 			return m, nil
 		}
@@ -216,7 +228,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			items[i] = entryItem{entry: e}
 		}
 		m.list.SetItems(items)
-		return m, nil
+		badges := computeBadges(items)
+		m.roomsTotal = badges.RoomsTotal()
+		m.dmsTotal = badges.DmsTotal()
+		return m, func() tea.Msg { return badges }
 
 	case ErrorMsg:
 		m.err = msg.Err.Error()
@@ -241,7 +256,7 @@ func (m Model) View() string {
 
 	var b strings.Builder
 
-	b.WriteString(tabbar.Render("Inbox"))
+	b.WriteString(tabbar.Render("Inbox", m.roomsTotal, m.dmsTotal, 0))
 	b.WriteString("\n")
 	b.WriteString(m.list.View())
 	b.WriteString("\n")
@@ -323,6 +338,58 @@ func sameEntry(a, b dto.InboxFeed) bool {
 		return a.Room.ID == b.Room.ID
 	}
 	return false
+}
+
+func computeBadges(items []list.Item) BadgesMsg {
+	msg := BadgesMsg{
+		RoomBadges: make(map[int64]int64),
+		ConvBadges: make(map[int64]int64),
+	}
+	for _, item := range items {
+		e := item.(entryItem).entry
+		if e.UnreadCount == 0 {
+			continue
+		}
+		if e.Room != nil {
+			msg.RoomBadges[e.Room.ID] = e.UnreadCount
+		} else if e.RefConversationID != nil {
+			msg.ConvBadges[*e.RefConversationID] = e.UnreadCount
+		}
+	}
+	return msg
+}
+
+// RoomsTotal returns the total unread count across all rooms.
+func (m BadgesMsg) RoomsTotal() int64 {
+	var t int64
+	for _, v := range m.RoomBadges {
+		t += v
+	}
+	return t
+}
+
+// DmsTotal returns the total unread count across all DM conversations.
+func (m BadgesMsg) DmsTotal() int64 {
+	var t int64
+	for _, v := range m.ConvBadges {
+		t += v
+	}
+	return t
+}
+
+// FetchBadgesCmd fetches the inbox and returns a BadgesMsg without requiring an open inbox screen.
+func FetchBadgesCmd(apiClient *api.Client) tea.Cmd {
+	return func() tea.Msg {
+		entries, err := apiClient.GetInbox(50)
+		if err != nil {
+			return nil
+		}
+		items := make([]list.Item, len(entries))
+		for i, e := range entries {
+			items[i] = entryItem{entry: e}
+		}
+		return computeBadges(items)
+	}
 }
 
 func (m Model) fetchEntries() tea.Cmd {

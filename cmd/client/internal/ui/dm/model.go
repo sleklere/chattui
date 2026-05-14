@@ -33,6 +33,19 @@ type LeaveDMListMsg struct{}
 // ShowInboxMsg signals that the user wants to navigate to the inbox screen.
 type ShowInboxMsg struct{}
 
+// ConvBadgeUpdateMsg updates the unread badge for a single conversation and the inbox total.
+type ConvBadgeUpdateMsg struct {
+	ConvID int64
+	Count  int64
+	Total  int64
+}
+
+// RefreshBadgesMsg replaces all conversation badges at once.
+type RefreshBadgesMsg struct {
+	Badges     map[int64]int64
+	InboxTotal int64
+}
+
 type convsLoadedMsg struct {
 	convs []dto.Conversation
 }
@@ -51,7 +64,9 @@ type convItem struct {
 
 func (i convItem) FilterValue() string { return i.conv.PeerUsername }
 
-type convItemDelegate struct{}
+type convItemDelegate struct {
+	badges map[int64]int64
+}
 
 func (d convItemDelegate) Height() int                             { return 2 }
 func (d convItemDelegate) Spacing() int                            { return 0 }
@@ -63,13 +78,20 @@ func (d convItemDelegate) Render(w io.Writer, m list.Model, index int, item list
 	}
 
 	t := theme.Current
+	badge := ""
+	if unread := d.badges[i.conv.ID]; unread > 0 {
+		badge = fmt.Sprintf(" (%d)", unread)
+	}
+
 	if index == m.Index() {
 		nameStyle := lipgloss.NewStyle().Foreground(t.Accent).Bold(true)
+		badgeStyle := lipgloss.NewStyle().Foreground(t.Gold).Bold(true)
 		indicator := lipgloss.NewStyle().Foreground(t.Accent).Render(">")
-		_, _ = fmt.Fprintf(w, "%s %s", indicator, nameStyle.Render(i.conv.PeerUsername))
+		_, _ = fmt.Fprintf(w, "%s %s%s", indicator, nameStyle.Render(i.conv.PeerUsername), badgeStyle.Render(badge))
 	} else {
 		nameStyle := lipgloss.NewStyle().Foreground(t.Text)
-		_, _ = fmt.Fprintf(w, "  %s", nameStyle.Render(i.conv.PeerUsername))
+		badgeStyle := lipgloss.NewStyle().Foreground(t.Gold)
+		_, _ = fmt.Fprintf(w, "  %s%s", nameStyle.Render(i.conv.PeerUsername), badgeStyle.Render(badge))
 	}
 }
 
@@ -77,6 +99,8 @@ func (d convItemDelegate) Render(w io.Writer, m list.Model, index int, item list
 type Model struct {
 	apiClient   *api.Client
 	list        list.Model
+	badges      map[int64]int64
+	inboxTotal  int64
 	creating    bool
 	createInput textinput.Model
 	err         string
@@ -85,10 +109,13 @@ type Model struct {
 }
 
 // New creates a new DM list Model.
-func New(apiClient *api.Client, width, height int) Model {
+func New(apiClient *api.Client, badges map[int64]int64, inboxTotal int64, width, height int) Model {
 	t := theme.Current
 
-	l := list.New([]list.Item{}, convItemDelegate{}, width, height-6)
+	if badges == nil {
+		badges = make(map[int64]int64)
+	}
+	l := list.New([]list.Item{}, convItemDelegate{badges: badges}, width, height-6)
 	l.Title = "Direct Messages"
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(false)
@@ -106,6 +133,8 @@ func New(apiClient *api.Client, width, height int) Model {
 	return Model{
 		apiClient:   apiClient,
 		list:        l,
+		badges:      badges,
+		inboxTotal:  inboxTotal,
 		createInput: input,
 		width:       width,
 		height:      height,
@@ -145,6 +174,18 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			}
 		}
 
+	case ConvBadgeUpdateMsg:
+		m.badges[msg.ConvID] = msg.Count
+		m.inboxTotal = msg.Total
+		m.list.SetDelegate(convItemDelegate{badges: m.badges})
+		return m, nil
+
+	case RefreshBadgesMsg:
+		m.badges = msg.Badges
+		m.inboxTotal = msg.InboxTotal
+		m.list.SetDelegate(convItemDelegate{badges: m.badges})
+		return m, nil
+
 	case convsLoadedMsg:
 		items := make([]list.Item, len(msg.convs))
 		for i, c := range msg.convs {
@@ -183,7 +224,7 @@ func (m Model) View() string {
 
 	var b strings.Builder
 
-	b.WriteString(tabbar.Render("DMs"))
+	b.WriteString(tabbar.Render("DMs", m.roomsTotal(), 0, m.inboxTotal))
 	b.WriteString("\n")
 	b.WriteString(m.list.View())
 	b.WriteString("\n")
@@ -222,6 +263,18 @@ func (m Model) updateCreating(msg tea.KeyMsg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.createInput, cmd = m.createInput.Update(msg)
 	return m, cmd
+}
+
+func (m Model) roomsTotal() int64 {
+	var dmsTotal int64
+	for _, v := range m.badges {
+		dmsTotal += v
+	}
+	r := m.inboxTotal - dmsTotal
+	if r < 0 {
+		return 0
+	}
+	return r
 }
 
 func (m Model) fetchConvs() tea.Cmd {

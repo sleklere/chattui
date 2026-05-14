@@ -32,6 +32,19 @@ type RoomErrorMsg struct {
 	Err error
 }
 
+// RoomBadgeUpdateMsg updates the unread badge for a single room and the inbox total.
+type RoomBadgeUpdateMsg struct {
+	RoomID int64
+	Count  int64
+	Total  int64
+}
+
+// RefreshBadgesMsg replaces all room badges at once.
+type RefreshBadgesMsg struct {
+	Badges     map[int64]int64
+	InboxTotal int64
+}
+
 type roomsLoadedMsg struct {
 	rooms []dto.Room
 }
@@ -50,7 +63,9 @@ type roomItem struct {
 
 func (i roomItem) FilterValue() string { return i.room.Name }
 
-type roomItemDelegate struct{}
+type roomItemDelegate struct {
+	badges map[int64]int64
+}
 
 func (d roomItemDelegate) Height() int                             { return 2 }
 func (d roomItemDelegate) Spacing() int                            { return 0 }
@@ -64,17 +79,23 @@ func (d roomItemDelegate) Render(w io.Writer, m list.Model, index int, item list
 	t := theme.Current
 	name := i.room.Name
 	slug := i.room.Slug
+	badge := ""
+	if unread := d.badges[i.room.ID]; unread > 0 {
+		badge = fmt.Sprintf(" (%d)", unread)
+	}
 
 	if index == m.Index() {
 		nameStyle := lipgloss.NewStyle().Foreground(t.Accent).Bold(true)
 		slugStyle := lipgloss.NewStyle().Foreground(t.Subtle)
+		badgeStyle := lipgloss.NewStyle().Foreground(t.Gold).Bold(true)
 		indicator := lipgloss.NewStyle().Foreground(t.Accent).Render(">")
-		str := fmt.Sprintf("%s %s %s", indicator, nameStyle.Render(name), slugStyle.Render("#"+slug))
+		str := fmt.Sprintf("%s %s%s %s", indicator, nameStyle.Render(name), badgeStyle.Render(badge), slugStyle.Render("#"+slug))
 		_, _ = fmt.Fprint(w, str)
 	} else {
 		nameStyle := lipgloss.NewStyle().Foreground(t.Text)
 		slugStyle := lipgloss.NewStyle().Foreground(t.Subtle)
-		str := fmt.Sprintf("  %s %s", nameStyle.Render(name), slugStyle.Render("#"+slug))
+		badgeStyle := lipgloss.NewStyle().Foreground(t.Gold)
+		str := fmt.Sprintf("  %s%s %s", nameStyle.Render(name), badgeStyle.Render(badge), slugStyle.Render("#"+slug))
 		_, _ = fmt.Fprint(w, str)
 	}
 }
@@ -83,6 +104,8 @@ func (d roomItemDelegate) Render(w io.Writer, m list.Model, index int, item list
 type Model struct {
 	apiClient    *api.Client
 	list         list.Model
+	badges       map[int64]int64
+	inboxTotal   int64
 	creating     bool
 	createInput  textinput.Model
 	pickingTheme bool
@@ -93,10 +116,13 @@ type Model struct {
 }
 
 // New creates a new rooms Model with the given API client and dimensions.
-func New(apiClient *api.Client, width, height int) Model {
+func New(apiClient *api.Client, badges map[int64]int64, inboxTotal int64, width, height int) Model {
 	t := theme.Current
 
-	l := list.New([]list.Item{}, roomItemDelegate{}, width, height-6)
+	if badges == nil {
+		badges = make(map[int64]int64)
+	}
+	l := list.New([]list.Item{}, roomItemDelegate{badges: badges}, width, height-6)
 	l.Title = "Rooms"
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(false)
@@ -114,6 +140,8 @@ func New(apiClient *api.Client, width, height int) Model {
 	return Model{
 		apiClient:   apiClient,
 		list:        l,
+		badges:      badges,
+		inboxTotal:  inboxTotal,
 		createInput: input,
 		width:       width,
 		height:      height,
@@ -167,6 +195,18 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			}
 		}
 
+	case RoomBadgeUpdateMsg:
+		m.badges[msg.RoomID] = msg.Count
+		m.inboxTotal = msg.Total
+		m.list.SetDelegate(roomItemDelegate{badges: m.badges})
+		return m, nil
+
+	case RefreshBadgesMsg:
+		m.badges = msg.Badges
+		m.inboxTotal = msg.InboxTotal
+		m.list.SetDelegate(roomItemDelegate{badges: m.badges})
+		return m, nil
+
 	case roomsLoadedMsg:
 		items := make([]list.Item, len(msg.rooms))
 		for i, r := range msg.rooms {
@@ -209,7 +249,7 @@ func (m Model) View() string {
 
 	var b strings.Builder
 
-	b.WriteString(tabbar.Render("Rooms"))
+	b.WriteString(tabbar.Render("Rooms", 0, m.dmsTotal(), m.inboxTotal))
 	b.WriteString("\n")
 	b.WriteString(m.list.View())
 	b.WriteString("\n")
@@ -319,6 +359,18 @@ func (m Model) updateCreating(msg tea.KeyMsg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.createInput, cmd = m.createInput.Update(msg)
 	return m, cmd
+}
+
+func (m Model) dmsTotal() int64 {
+	var roomsTotal int64
+	for _, v := range m.badges {
+		roomsTotal += v
+	}
+	d := m.inboxTotal - roomsTotal
+	if d < 0 {
+		return 0
+	}
+	return d
 }
 
 func (m Model) fetchRooms() tea.Cmd {
