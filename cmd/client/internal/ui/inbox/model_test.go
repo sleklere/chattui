@@ -4,27 +4,27 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/bubbles/list"
-	"github.com/sleklere/chattui/cmd/client/internal/api"
+	"github.com/sleklere/chattui/pkg/dto"
 )
 
-func convEntry(convID int64, peerUsername string, unread int64) api.InboxEntry {
-	return api.InboxEntry{
+func convEntry(convID int64, peerUsername string, unread int64) dto.InboxFeed {
+	return dto.InboxFeed{
 		EntryType:         "conversation",
 		RefConversationID: &convID,
-		SourceUser:        &api.InboxUser{ID: 1, Username: peerUsername},
+		SourceUser:        &dto.InboxUser{ID: 1, Username: peerUsername},
 		UnreadCount:       unread,
 	}
 }
 
-func roomEntry(roomID int64, roomName string, unread int64) api.InboxEntry {
-	return api.InboxEntry{
+func roomEntry(roomID int64, roomName string, unread int64) dto.InboxFeed {
+	return dto.InboxFeed{
 		EntryType:   "conversation",
-		Room:        &api.InboxRoom{ID: roomID, Name: roomName},
+		Room:        &dto.InboxRoom{ID: roomID, Name: roomName},
 		UnreadCount: unread,
 	}
 }
 
-func toItems(entries ...api.InboxEntry) []list.Item {
+func toItems(entries ...dto.InboxFeed) []list.Item {
 	items := make([]list.Item, len(entries))
 	for i, e := range entries {
 		items[i] = entryItem{entry: e}
@@ -32,7 +32,7 @@ func toItems(entries ...api.InboxEntry) []list.Item {
 	return items
 }
 
-func entryAt(items []list.Item, i int) api.InboxEntry {
+func entryAt(items []list.Item, i int) dto.InboxFeed {
 	return items[i].(entryItem).entry
 }
 

@@ -14,13 +14,14 @@ import (
 	"github.com/sleklere/chattui/cmd/client/internal/api"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/theme"
 	"github.com/sleklere/chattui/cmd/client/internal/ws"
+	"github.com/sleklere/chattui/pkg/dto"
 )
 
 // LeaveRoomMsg signals that the user wants to leave the current room.
 type LeaveRoomMsg struct{}
 
 type historyLoadedMsg struct {
-	messages []api.MessageResponse
+	messages []dto.Message
 }
 
 // Model is the Bubble Tea model for the chat room screen.
@@ -29,7 +30,7 @@ type Model struct {
 	wsClient  *ws.Client
 	logger    *slog.Logger
 
-	room     api.RoomResponse
+	room     dto.Room
 	userID   int64
 	username string
 
@@ -53,7 +54,7 @@ func New(
 	apiClient *api.Client,
 	wsClient *ws.Client,
 	logger *slog.Logger,
-	room api.RoomResponse,
+	room dto.Room,
 	userID int64,
 	username string,
 	width, height int,

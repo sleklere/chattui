@@ -4,10 +4,10 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/sleklere/chattui/cmd/server/internal/api/dto/response"
 	"github.com/sleklere/chattui/cmd/server/internal/auth"
 	"github.com/sleklere/chattui/cmd/server/internal/httpx"
 	"github.com/sleklere/chattui/cmd/server/internal/inbox"
+	"github.com/sleklere/chattui/pkg/dto"
 )
 
 // InboxHandler handles inbox-related HTTP endpoints.
@@ -30,23 +30,23 @@ func (h *InboxHandler) List(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	res := make([]response.InboxRes, len(rows))
+	res := make([]dto.InboxFeed, len(rows))
 	for i, e := range rows {
 		res[i] = toInboxRes(e)
 	}
 	return httpx.JSON(w, http.StatusOK, res)
 }
 
-func toInboxRes(e inbox.FeedEntry) response.InboxRes {
-	r := response.InboxRes{
+func toInboxRes(e inbox.FeedEntry) dto.InboxFeed {
+	r := dto.InboxFeed{
 		EntryType: e.EntryType,
 		CreatedAt: e.CreatedAt,
 	}
 	if e.EntryType == "event" {
 		r.Kind = e.Kind
-		r.SourceUser = &response.InboxUser{ID: e.SourceUserID, Username: e.SourceUsername}
+		r.SourceUser = &dto.InboxUser{ID: e.SourceUserID, Username: e.SourceUsername}
 		if e.RefRoomID != nil && e.RefRoomName != nil {
-			r.Room = &response.InboxRoom{ID: *e.RefRoomID, Name: *e.RefRoomName}
+			r.Room = &dto.InboxRoom{ID: *e.RefRoomID, Name: *e.RefRoomName}
 		}
 		return r
 	}
@@ -54,17 +54,17 @@ func toInboxRes(e inbox.FeedEntry) response.InboxRes {
 	r.UnreadCount = e.UnreadCount
 	r.RefConversationID = e.RefConversationID
 	if e.RefRoomID != nil && e.RefRoomName != nil {
-		r.Room = &response.InboxRoom{ID: *e.RefRoomID, Name: *e.RefRoomName}
+		r.Room = &dto.InboxRoom{ID: *e.RefRoomID, Name: *e.RefRoomName}
 	}
 	if e.PeerUsername != "" {
-		r.SourceUser = &response.InboxUser{ID: e.PeerID, Username: e.PeerUsername}
+		r.SourceUser = &dto.InboxUser{ID: e.PeerID, Username: e.PeerUsername}
 	}
 	if e.LastMessageBody != nil {
 		senderID := int64(0)
 		if e.LastMessageSenderID != nil {
 			senderID = *e.LastMessageSenderID
 		}
-		r.LastMessage = &response.InboxLastMessage{Body: *e.LastMessageBody, SenderID: senderID}
+		r.LastMessage = &dto.InboxLastMessage{Body: *e.LastMessageBody, SenderID: senderID}
 	}
 	return r
 }

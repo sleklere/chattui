@@ -5,10 +5,10 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/sleklere/chattui/cmd/server/internal/api/dto/response"
 	"github.com/sleklere/chattui/cmd/server/internal/errs"
 	"github.com/sleklere/chattui/cmd/server/internal/httpx"
 	"github.com/sleklere/chattui/cmd/server/internal/user"
+	"github.com/sleklere/chattui/pkg/dto"
 )
 
 // UserHandler handles user-related HTTP requests.
@@ -37,7 +37,7 @@ func (h *UserHandler) GetByUsername(w http.ResponseWriter, r *http.Request) erro
 		return err
 	}
 
-	return httpx.JSON(w, http.StatusOK, response.UserRes{
+	return httpx.JSON(w, http.StatusOK, dto.User{
 		ID:        u.ID,
 		Username:  u.Username,
 		CreatedAt: u.CreatedAt.Time,

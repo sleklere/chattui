@@ -6,10 +6,10 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/sleklere/chattui/cmd/server/internal/api/dto/response"
 	"github.com/sleklere/chattui/cmd/server/internal/auth"
 	"github.com/sleklere/chattui/cmd/server/internal/conversation"
 	"github.com/sleklere/chattui/cmd/server/internal/httpx"
+	"github.com/sleklere/chattui/pkg/dto"
 )
 
 // ConversationHandler handles conversation-related HTTP requests.
@@ -32,9 +32,9 @@ func (h *ConversationHandler) List(w http.ResponseWriter, r *http.Request) error
 		return err
 	}
 
-	res := make([]response.ConversationRes, len(convs))
+	res := make([]dto.Conversation, len(convs))
 	for i, c := range convs {
-		res[i] = response.ConversationRes{
+		res[i] = dto.Conversation{
 			ID:           c.ID,
 			PeerID:       c.PeerID,
 			PeerUsername: c.PeerUsername,
@@ -55,16 +55,15 @@ func (h *ConversationHandler) ListMessages(w http.ResponseWriter, r *http.Reques
 		return err
 	}
 
-	res := make([]response.ConversationMessageRes, len(msgs))
+	convID := conversationID
+	res := make([]dto.Message, len(msgs))
 	for i, m := range msgs {
-		res[i] = response.ConversationMessageRes{
-			MessageRes: response.MessageRes{
-				ID:        m.ID,
-				SenderID:  m.SenderID,
-				Body:      m.Body,
-				CreatedAt: m.CreatedAt.Time,
-			},
-			ConversationID: m.ConversationID.Int64,
+		res[i] = dto.Message{
+			ID:             m.ID,
+			ConversationID: &convID,
+			SenderID:       m.SenderID,
+			Body:           m.Body,
+			CreatedAt:      m.CreatedAt.Time,
 		}
 	}
 	return httpx.JSON(w, http.StatusOK, res)

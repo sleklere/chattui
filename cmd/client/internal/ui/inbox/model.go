@@ -16,6 +16,7 @@ import (
 	"github.com/sleklere/chattui/cmd/client/internal/ui/tabbar"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/theme"
 	"github.com/sleklere/chattui/cmd/client/internal/ws"
+	"github.com/sleklere/chattui/pkg/dto"
 )
 
 // LeaveInboxMsg signals that the user wants to go back to rooms.
@@ -43,11 +44,11 @@ type ErrorMsg struct {
 }
 
 type entriesLoadedMsg struct {
-	entries []api.InboxEntry
+	entries []dto.InboxFeed
 }
 
 type entryItem struct {
-	entry api.InboxEntry
+	entry dto.InboxFeed
 }
 
 func (i entryItem) FilterValue() string {
@@ -87,7 +88,7 @@ func (d entryItemDelegate) Render(w io.Writer, m list.Model, index int, item lis
 	}
 }
 
-func formatEntry(e api.InboxEntry) string {
+func formatEntry(e dto.InboxFeed) string {
 	if e.EntryType == "event" {
 		username := ""
 		if e.SourceUser != nil {
@@ -255,7 +256,7 @@ func (m Model) View() string {
 	return b.String()
 }
 
-func openEntry(e api.InboxEntry) tea.Cmd {
+func openEntry(e dto.InboxFeed) tea.Cmd {
 	return func() tea.Msg {
 		if e.Room != nil {
 			return OpenRoomMsg{RoomID: e.Room.ID, RoomName: e.Room.Name}
@@ -271,8 +272,8 @@ func openEntry(e api.InboxEntry) tea.Cmd {
 	}
 }
 
-func inboxEntryFromPayload(p ws.InboxUpdatedPayload) api.InboxEntry {
-	e := api.InboxEntry{
+func inboxEntryFromPayload(p ws.InboxUpdatedPayload) dto.InboxFeed {
+	e := dto.InboxFeed{
 		EntryType:         p.EntryType,
 		Kind:              p.Kind,
 		RefConversationID: p.RefConversationID,
@@ -284,26 +285,26 @@ func inboxEntryFromPayload(p ws.InboxUpdatedPayload) api.InboxEntry {
 		if p.RefRoomName != nil {
 			name = *p.RefRoomName
 		}
-		e.Room = &api.InboxRoom{ID: *p.RefRoomID, Name: name}
+		e.Room = &dto.InboxRoom{ID: *p.RefRoomID, Name: name}
 	}
 	if p.LastMessageBody != nil {
 		senderID := int64(0)
 		if p.LastMessageSenderID != nil {
 			senderID = *p.LastMessageSenderID
 		}
-		e.LastMessage = &api.InboxLastMessage{Body: *p.LastMessageBody, SenderID: senderID}
+		e.LastMessage = &dto.InboxLastMessage{Body: *p.LastMessageBody, SenderID: senderID}
 	}
 	if p.PeerID > 0 {
-		e.SourceUser = &api.InboxUser{ID: p.PeerID, Username: p.PeerUsername}
+		e.SourceUser = &dto.InboxUser{ID: p.PeerID, Username: p.PeerUsername}
 	} else if p.SourceUserID > 0 {
-		e.SourceUser = &api.InboxUser{ID: p.SourceUserID, Username: p.SourceUsername}
+		e.SourceUser = &dto.InboxUser{ID: p.SourceUserID, Username: p.SourceUsername}
 	}
 	return e
 }
 
 // upsertEntry puts entry at the top of items, replacing any existing entry
 // that refers to the same conversation or room.
-func upsertEntry(items []list.Item, entry api.InboxEntry) []list.Item {
+func upsertEntry(items []list.Item, entry dto.InboxFeed) []list.Item {
 	result := make([]list.Item, 0, len(items)+1)
 	result = append(result, entryItem{entry: entry})
 	for _, item := range items {
@@ -314,7 +315,7 @@ func upsertEntry(items []list.Item, entry api.InboxEntry) []list.Item {
 	return result
 }
 
-func sameEntry(a, b api.InboxEntry) bool {
+func sameEntry(a, b dto.InboxFeed) bool {
 	if a.RefConversationID != nil && b.RefConversationID != nil {
 		return *a.RefConversationID == *b.RefConversationID
 	}

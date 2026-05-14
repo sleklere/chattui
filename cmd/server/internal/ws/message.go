@@ -38,10 +38,10 @@ type Message struct {
 }
 
 // Type returns the WebSocket message type constant for each payload. //nolint:revive
-func (p RoomMessagePayload) Type() string   { return TypeRoomMessage }   //nolint:revive
-func (p DirectMessagePayload) Type() string { return TypeDirectMessage } //nolint:revive
-func (p RoomPresencePayload) Type() string  { return TypeJoinRoom }      //nolint:revive
-func (p UserTypingPayload) Type() string    { return TypeUserTyping }    //nolint:revive
+func (p RoomMessagePayload) Type() string   { return TypeRoomMessage }     //nolint:revive
+func (p DirectMessagePayload) Type() string { return TypeDirectMessage }   //nolint:revive
+func (p RoomPresencePayload) Type() string  { return TypeJoinRoom }        //nolint:revive
+func (p UserTypingPayload) Type() string    { return TypeUserTyping }      //nolint:revive
 func (p LoadHistoryPayload) Type() string   { return TypeLoadRoomHistory } //nolint:revive
 func (p ErrorPayload) Type() string         { return TypeError }           //nolint:revive
 

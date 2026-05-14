@@ -1,7 +1,7 @@
-package response
+package dto
 
-// ConversationRes is the response body for a conversation.
-type ConversationRes struct {
+// Conversation represents a DM conversation in API responses.
+type Conversation struct {
 	ID           int64  `json:"id"`
 	PeerID       int64  `json:"peer_id"`
 	PeerUsername string `json:"peer_username"`

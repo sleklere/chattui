@@ -15,6 +15,7 @@ import (
 	"github.com/sleklere/chattui/cmd/client/internal/ui/inbox"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/rooms"
 	"github.com/sleklere/chattui/cmd/client/internal/ws"
+	"github.com/sleklere/chattui/pkg/dto"
 )
 
 type wsConnectedMsg struct {
@@ -40,7 +41,7 @@ type AppState struct {
 	Token       string
 	UserID      int64
 	Username    string
-	CurrentRoom *api.RoomResponse
+	CurrentRoom *dto.Room
 }
 
 // App is the top-level Bubble Tea model that manages screen transitions.
@@ -197,7 +198,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.dm.Init()
 
 	case inbox.OpenRoomMsg:
-		room := api.RoomResponse{ID: msg.RoomID, Name: msg.RoomName}
+		room := dto.Room{ID: msg.RoomID, Name: msg.RoomName}
 		a.state.CurrentRoom = &room
 		a.active = screenChat
 		a.chat = chat.New(

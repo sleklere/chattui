@@ -13,11 +13,12 @@ import (
 	"github.com/sleklere/chattui/cmd/client/internal/api"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/tabbar"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/theme"
+	"github.com/sleklere/chattui/pkg/dto"
 )
 
 // ConvSelectedMsg signals that an existing conversation was selected.
 type ConvSelectedMsg struct {
-	Conv api.ConversationResponse
+	Conv dto.Conversation
 }
 
 // NewDMMsg signals that the user wants to open a new DM with a specific user.
@@ -33,11 +34,11 @@ type LeaveDMListMsg struct{}
 type ShowInboxMsg struct{}
 
 type convsLoadedMsg struct {
-	convs []api.ConversationResponse
+	convs []dto.Conversation
 }
 
 type peerFoundMsg struct {
-	user api.UserResponse
+	user dto.User
 }
 
 type dmErrorMsg struct {
@@ -45,7 +46,7 @@ type dmErrorMsg struct {
 }
 
 type convItem struct {
-	conv api.ConversationResponse
+	conv dto.Conversation
 }
 
 func (i convItem) FilterValue() string { return i.conv.PeerUsername }

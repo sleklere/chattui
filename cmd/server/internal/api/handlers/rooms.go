@@ -9,12 +9,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	reqdto "github.com/sleklere/chattui/cmd/server/internal/api/dto/request"
-	"github.com/sleklere/chattui/cmd/server/internal/api/dto/response"
 	"github.com/sleklere/chattui/cmd/server/internal/auth"
 	"github.com/sleklere/chattui/cmd/server/internal/errs"
 	"github.com/sleklere/chattui/cmd/server/internal/httpx"
 	"github.com/sleklere/chattui/cmd/server/internal/room"
 	"github.com/sleklere/chattui/cmd/server/internal/ws"
+	"github.com/sleklere/chattui/pkg/dto"
 )
 
 // RoomHandler handles room-related HTTP requests.
@@ -46,7 +46,7 @@ func (h *RoomHandler) Create(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	return httpx.JSON(w, http.StatusCreated, response.RoomRes{
+	return httpx.JSON(w, http.StatusCreated, dto.Room{
 		ID:        room.ID,
 		Name:      room.Name,
 		Slug:      room.Slug,
@@ -61,9 +61,9 @@ func (h *RoomHandler) List(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	res := make([]response.RoomRes, len(rooms))
+	res := make([]dto.Room, len(rooms))
 	for i, room := range rooms {
-		res[i] = response.RoomRes{
+		res[i] = dto.Room{
 			ID:        room.ID,
 			Name:      room.Name,
 			Slug:      room.Slug,
@@ -85,7 +85,7 @@ func (h *RoomHandler) GetBySlug(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return httpx.JSON(w, http.StatusOK,
-		response.RoomRes{
+		dto.Room{
 			ID:        room.ID,
 			Name:      room.Name,
 			Slug:      room.Slug,
@@ -149,17 +149,16 @@ func (h *RoomHandler) Messages(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	res := make([]response.RoomMessageRes, len(msgs))
+	roomIDVal := roomID
+	res := make([]dto.Message, len(msgs))
 	for i, m := range msgs {
-		res[i] = response.RoomMessageRes{
-			MessageRes: response.MessageRes{
-				ID:        m.ID,
-				SenderID:  m.SenderID,
-				Body:      m.Body,
-				CreatedAt: m.CreatedAt.Time,
-			},
-			RoomID:         m.RoomID.Int64,
+		res[i] = dto.Message{
+			ID:             m.ID,
+			RoomID:         &roomIDVal,
+			SenderID:       m.SenderID,
 			SenderUsername: m.SenderUsername,
+			Body:           m.Body,
+			CreatedAt:      m.CreatedAt.Time,
 		}
 	}
 	return httpx.JSON(w, http.StatusOK, res)

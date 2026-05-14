@@ -13,11 +13,12 @@ import (
 	"github.com/sleklere/chattui/cmd/client/internal/api"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/tabbar"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/theme"
+	"github.com/sleklere/chattui/pkg/dto"
 )
 
 // RoomSelectedMsg signals that a room has been selected and joined.
 type RoomSelectedMsg struct {
-	Room api.RoomResponse
+	Room dto.Room
 }
 
 // ShowDMsMsg signals that the user wants to navigate to the DM screen.
@@ -32,19 +33,19 @@ type RoomErrorMsg struct {
 }
 
 type roomsLoadedMsg struct {
-	rooms []api.RoomResponse
+	rooms []dto.Room
 }
 
 type roomCreatedMsg struct {
-	room api.RoomResponse
+	room dto.Room
 }
 
 type roomJoinedMsg struct {
-	room api.RoomResponse
+	room dto.Room
 }
 
 type roomItem struct {
-	room api.RoomResponse
+	room dto.Room
 }
 
 func (i roomItem) FilterValue() string { return i.room.Name }
@@ -340,7 +341,7 @@ func (m Model) createRoom(name string) tea.Cmd {
 	}
 }
 
-func (m Model) joinAndSelect(room api.RoomResponse) tea.Cmd {
+func (m Model) joinAndSelect(room dto.Room) tea.Cmd {
 	return func() tea.Msg {
 		if err := m.apiClient.JoinRoom(room.ID); err != nil {
 			return RoomErrorMsg{Err: err}

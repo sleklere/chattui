@@ -14,13 +14,14 @@ import (
 	"github.com/sleklere/chattui/cmd/client/internal/api"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/theme"
 	"github.com/sleklere/chattui/cmd/client/internal/ws"
+	"github.com/sleklere/chattui/pkg/dto"
 )
 
 // LeaveDMMsg signals that the user wants to go back to the DM list.
 type LeaveDMMsg struct{}
 
 type historyLoadedMsg struct {
-	messages []api.MessageResponse
+	messages []dto.Message
 }
 
 type dmMessage struct {

@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sleklere/chattui/cmd/client/internal/api"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/theme"
+	"github.com/sleklere/chattui/pkg/dto"
 )
 
 type mode int
@@ -209,7 +210,7 @@ func (m Model) submit() tea.Cmd {
 	req := api.AuthRequest{Username: username, Password: password}
 
 	return func() tea.Msg {
-		var res api.AuthResponse
+		var res dto.Auth
 		var err error
 
 		if m.mode == modeLogin {
