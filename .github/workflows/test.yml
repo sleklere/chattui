@@ -7,9 +7,9 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5.4.0
+      - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
@@ -35,9 +35,9 @@ jobs:
   unit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5.4.0
+      - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
@@ -46,9 +46,9 @@ jobs:
   integration:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5.4.0
+      - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
