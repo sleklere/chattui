@@ -195,6 +195,38 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.active = screenDM
 		a.dm = dm.New(a.state.APIClient, a.width, a.height)
 		return a, a.dm.Init()
+
+	case inbox.OpenRoomMsg:
+		room := api.RoomResponse{ID: msg.RoomID, Name: msg.RoomName}
+		a.state.CurrentRoom = &room
+		a.active = screenChat
+		a.chat = chat.New(
+			a.state.APIClient,
+			a.wsClient,
+			a.state.Logger,
+			room,
+			a.state.UserID,
+			a.state.Username,
+			a.width,
+			a.height,
+		)
+		return a, a.chat.Init()
+
+	case inbox.OpenDMMsg:
+		a.active = screenDMChat
+		a.dmChat = dmchat.New(
+			a.state.APIClient,
+			a.wsClient,
+			a.state.Logger,
+			msg.ConversationID,
+			msg.PeerID,
+			msg.PeerUsername,
+			a.state.UserID,
+			a.state.Username,
+			a.width,
+			a.height,
+		)
+		return a, a.dmChat.Init()
 	}
 
 	switch a.active {

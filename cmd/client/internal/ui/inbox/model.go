@@ -24,6 +24,19 @@ type LeaveInboxMsg struct{}
 // ShowDMsMsg signals that the user wants to navigate to the DMs screen.
 type ShowDMsMsg struct{}
 
+// OpenRoomMsg signals that the user wants to open a room from the inbox.
+type OpenRoomMsg struct {
+	RoomID   int64
+	RoomName string
+}
+
+// OpenDMMsg signals that the user wants to open a DM conversation from the inbox.
+type OpenDMMsg struct {
+	ConversationID int64
+	PeerID         int64
+	PeerUsername   string
+}
+
 // ErrorMsg signals an error while loading inbox entries.
 type ErrorMsg struct {
 	Err error
@@ -180,6 +193,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			return m, func() tea.Msg { return ShowDMsMsg{} }
 		case "r":
 			return m, m.fetchEntries()
+		case "enter":
+			if item, ok := m.list.SelectedItem().(entryItem); ok {
+				return m, openEntry(item.entry)
+			}
 		}
 
 	case ws.IncomingMsg:
@@ -236,6 +253,22 @@ func (m Model) View() string {
 	b.WriteString(helpStyle.Render("tab/shift+tab: switch tabs  r: refresh  esc: back to rooms"))
 
 	return b.String()
+}
+
+func openEntry(e api.InboxEntry) tea.Cmd {
+	return func() tea.Msg {
+		if e.Room != nil {
+			return OpenRoomMsg{RoomID: e.Room.ID, RoomName: e.Room.Name}
+		}
+		if e.RefConversationID != nil && e.SourceUser != nil {
+			return OpenDMMsg{
+				ConversationID: *e.RefConversationID,
+				PeerID:         e.SourceUser.ID,
+				PeerUsername:   e.SourceUser.Username,
+			}
+		}
+		return nil
+	}
 }
 
 func inboxEntryFromPayload(p ws.InboxUpdatedPayload) api.InboxEntry {
