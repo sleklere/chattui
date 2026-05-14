@@ -1,6 +1,7 @@
 package ws
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/sleklere/chattui/cmd/server/internal/bus"
+	"github.com/sleklere/chattui/cmd/server/internal/event"
 )
 
 // ---------------------------------------------------------------------------
@@ -86,7 +88,7 @@ func syncHub(t *testing.T, h *Hub, via *Client) {
 // startHub creates a Hub, starts its Run loop, and returns it.
 func startHub(t *testing.T) *Hub {
 	t.Helper()
-	h := NewHub(bus.NewBus(nopLogger))
+	h := NewHub(bus.NewBus(nopLogger), nopLogger)
 	go h.Run()
 	return h
 }
@@ -356,6 +358,69 @@ func TestHub_BroadcastNonExistentRoom(t *testing.T) {
 		targetUserIDs: []int64{777},
 	}
 	syncHub(t, h, sync)
+}
+
+// ---------------------------------------------------------------------------
+// Test 13 – handleInboxEntryUpdated: targeted user gets inbox_updated, others don't
+// ---------------------------------------------------------------------------
+
+func TestHub_HandleInboxEntryUpdated(t *testing.T) {
+	b := bus.NewBus(nopLogger)
+	h := NewHub(b, nopLogger)
+	go h.Run()
+
+	target := newTestClient(h, 2, map[int64]bool{})
+	other := newTestClient(h, 3, map[int64]bool{})
+	registerAll(t, h, target, other)
+
+	convID := int64(42)
+	b.Publish(context.Background(), event.InboxEntryUpdatedEvent{
+		UserID:            2,
+		EntryType:         "conversation",
+		RefConversationID: &convID,
+		UnreadCount:       1,
+		PeerID:            1,
+		PeerUsername:      "user_1",
+	})
+
+	got := expectMessage(t, target.send)
+	if got.Type != TypeInboxUpdated {
+		t.Fatalf("expected type %s, got %s", TypeInboxUpdated, got.Type)
+	}
+
+	var p InboxUpdatedPayload
+	if err := json.Unmarshal(got.Payload, &p); err != nil {
+		t.Fatalf("failed to unmarshal payload: %v", err)
+	}
+	if p.RefConversationID == nil || *p.RefConversationID != convID {
+		t.Fatalf("expected conversation_id=%d, got %v", convID, p.RefConversationID)
+	}
+	if p.UnreadCount != 1 {
+		t.Fatalf("expected unread_count=1, got %d", p.UnreadCount)
+	}
+
+	expectNoMessage(t, other.send)
+}
+
+// ---------------------------------------------------------------------------
+// Test 14 – handleInboxEntryUpdated: user not connected receives nothing (no panic)
+// ---------------------------------------------------------------------------
+
+func TestHub_HandleInboxEntryUpdated_UserOffline(t *testing.T) {
+	b := bus.NewBus(nopLogger)
+	h := NewHub(b, nopLogger)
+	go h.Run()
+
+	online := newTestClient(h, 1, map[int64]bool{})
+	registerAll(t, h, online)
+
+	offlineUserID := int64(99)
+	b.Publish(context.Background(), event.InboxEntryUpdatedEvent{
+		UserID:    offlineUserID,
+		EntryType: "conversation",
+	})
+
+	syncHub(t, h, online) // would hang if hub panicked
 }
 
 // ---------------------------------------------------------------------------

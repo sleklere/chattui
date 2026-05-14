@@ -35,9 +35,13 @@ func setup(t *testing.T, q *dbstore.Queries, suffix string) (int64, int64, int64
 
 func newInboxSvc(t *testing.T, q *dbstore.Queries) *Service {
 	t.Helper()
-	// CaptureBus so subscriptions are registered but no async dispatch runs.
-	// Handlers are called directly in these tests.
 	return NewService(&testhelper.CaptureBus{}, testhelper.DiscardLogger(), q)
+}
+
+func newInboxSvcWithBus(t *testing.T, q *dbstore.Queries) (*Service, *testhelper.CaptureBus) {
+	t.Helper()
+	b := &testhelper.CaptureBus{}
+	return NewService(b, testhelper.DiscardLogger(), q), b
 }
 
 func TestHandleRoomJoined_SavesEventForMembersAndCursorForJoiner(t *testing.T) {
@@ -150,6 +154,85 @@ func TestHandleRoomMessageSent_UpdatesCursorForAllMembersExceptSender(t *testing
 		if row.EntryType == "conversation" && row.UnreadCount > 0 {
 			t.Errorf("sender's own cursor should have unread_count=0, got %d", row.UnreadCount)
 		}
+	}
+}
+
+func TestHandleRoomMessageSent_PublishesInboxEntryUpdatedForMembers(t *testing.T) {
+	if testPool == nil {
+		t.Skip("testcontainers not available")
+	}
+	ctx := context.Background()
+	_, q := testhelper.NewTx(t, testPool)
+	svc, bus := newInboxSvcWithBus(t, q)
+
+	memberID, senderID, roomID := setup(t, q, "rmsg-pub")
+	for _, uid := range []int64{memberID, senderID} {
+		if err := svc.handleRoomJoined(ctx, event.RoomJoinedEvent{RoomID: roomID, UserID: uid}); err != nil {
+			t.Fatalf("handleRoomJoined uid=%d: %v", uid, err)
+		}
+	}
+
+	if err := svc.handleRoomMessageSent(ctx, event.RoomMessageSentEvent{
+		RoomID: roomID, SenderID: senderID, Body: "hello",
+	}); err != nil {
+		t.Fatalf("handleRoomMessageSent: %v", err)
+	}
+
+	published := bus.EventsOfKind("inbox_entry_updated")
+	if len(published) != 1 {
+		t.Fatalf("expected 1 inbox_entry_updated event (member only), got %d", len(published))
+	}
+	e := published[0].(event.InboxEntryUpdatedEvent)
+	if e.UserID != memberID {
+		t.Errorf("expected UserID=%d, got %d", memberID, e.UserID)
+	}
+	if e.UnreadCount != 1 {
+		t.Errorf("expected UnreadCount=1, got %d", e.UnreadCount)
+	}
+}
+
+func TestHandleDMSent_PublishesInboxEntryUpdatedForRecipient(t *testing.T) {
+	if testPool == nil {
+		t.Skip("testcontainers not available")
+	}
+	ctx := context.Background()
+	_, q := testhelper.NewTx(t, testPool)
+	svc, bus := newInboxSvcWithBus(t, q)
+
+	sender, err := q.CreateUser(ctx, dbstore.CreateUserParams{Username: "dmpub-sender", Password: "x"})
+	if err != nil {
+		t.Fatalf("create sender: %v", err)
+	}
+	recipient, err := q.CreateUser(ctx, dbstore.CreateUserParams{Username: "dmpub-recipient", Password: "x"})
+	if err != nil {
+		t.Fatalf("create recipient: %v", err)
+	}
+	conv, err := q.GetOrCreateConversation(ctx, dbstore.GetOrCreateConversationParams{UserA: sender.ID, UserB: recipient.ID})
+	if err != nil {
+		t.Fatalf("GetOrCreateConversation: %v", err)
+	}
+	if err := svc.handleConversationCreated(ctx, event.ConversationCreatedEvent{
+		ConversationID: conv.ID, UserAID: sender.ID, UserBID: recipient.ID,
+	}); err != nil {
+		t.Fatalf("handleConversationCreated: %v", err)
+	}
+
+	if err := svc.handleDMSent(ctx, event.DirectMessageSentEvent{
+		ConversationID: conv.ID, SenderID: sender.ID, RecipientID: recipient.ID, Body: "hey",
+	}); err != nil {
+		t.Fatalf("handleDMSent: %v", err)
+	}
+
+	published := bus.EventsOfKind("inbox_entry_updated")
+	if len(published) != 1 {
+		t.Fatalf("expected 1 inbox_entry_updated event, got %d", len(published))
+	}
+	e := published[0].(event.InboxEntryUpdatedEvent)
+	if e.UserID != recipient.ID {
+		t.Errorf("expected UserID=%d, got %d", recipient.ID, e.UserID)
+	}
+	if e.RefConversationID == nil || *e.RefConversationID != conv.ID {
+		t.Errorf("expected RefConversationID=%d, got %v", conv.ID, e.RefConversationID)
 	}
 }
 

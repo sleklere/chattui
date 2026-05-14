@@ -25,6 +25,8 @@ const (
 	TypePong    = "pong"
 	TypeError   = "error"
 	TypeSuccess = "success"
+
+	TypeInboxUpdated = "inbox_updated"
 )
 
 // Message is the envelope for all WebSocket messages.
@@ -34,6 +36,14 @@ type Message struct {
 	Payload   json.RawMessage `json:"payload,omitempty"`
 	Timestamp time.Time       `json:"timestamp"`
 }
+
+// Type returns the WebSocket message type constant for each payload. //nolint:revive
+func (p RoomMessagePayload) Type() string   { return TypeRoomMessage }   //nolint:revive
+func (p DirectMessagePayload) Type() string { return TypeDirectMessage } //nolint:revive
+func (p RoomPresencePayload) Type() string  { return TypeJoinRoom }      //nolint:revive
+func (p UserTypingPayload) Type() string    { return TypeUserTyping }    //nolint:revive
+func (p LoadHistoryPayload) Type() string   { return TypeLoadRoomHistory } //nolint:revive
+func (p ErrorPayload) Type() string         { return TypeError }           //nolint:revive
 
 // RoomMessagePayload is the payload for room messages.
 type RoomMessagePayload struct {
@@ -74,6 +84,27 @@ type LoadHistoryPayload struct {
 	ConversationID *int64 `json:"conversation_id,omitempty"`
 	Limit          int    `json:"limit"`
 	BeforeID       *int64 `json:"before_id,omitempty"`
+}
+
+// InboxUpdatedPayload is sent to connected clients when their inbox entry changes.
+type InboxUpdatedPayload struct {
+	EntryType           string  `json:"entry_type"`
+	Kind                string  `json:"kind"`
+	SourceUserID        int64   `json:"source_user_id"`
+	SourceUsername      string  `json:"source_username"`
+	RefRoomID           *int64  `json:"room_id,omitempty"`
+	RefRoomName         *string `json:"room_name,omitempty"`
+	RefConversationID   *int64  `json:"conversation_id,omitempty"`
+	UnreadCount         int64   `json:"unread_count"`
+	LastMessageBody     *string `json:"last_message_body,omitempty"`
+	LastMessageSenderID *int64  `json:"last_message_sender_id,omitempty"`
+	PeerID              int64   `json:"peer_id"`
+	PeerUsername        string  `json:"peer_username"`
+}
+
+// Type returns the WebSocket message type constant for InboxUpdatedPayload.
+func (p InboxUpdatedPayload) Type() string {
+	return TypeInboxUpdated
 }
 
 // ErrorPayload is the payload for error responses sent to the client.

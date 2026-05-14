@@ -18,7 +18,7 @@ func noopLogger() *slog.Logger {
 func newTestBus() *customBus {
 	return &customBus{
 		queue:    make(chan event.Event, 3000),
-		handlers: make(map[string]func(context.Context, event.Event) error),
+		handlers: make(map[string][]func(context.Context, event.Event) error),
 		logger:   noopLogger(),
 	}
 }

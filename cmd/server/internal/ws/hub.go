@@ -2,10 +2,13 @@ package ws
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log/slog"
 
 	"github.com/coder/websocket"
 	"github.com/sleklere/chattui/cmd/server/internal/bus"
+	"github.com/sleklere/chattui/cmd/server/internal/event"
 	dbstore "github.com/sleklere/chattui/cmd/server/internal/store"
 )
 
@@ -49,6 +52,8 @@ type Hub struct {
 	userRoomUpdate chan UserRoomPresent
 
 	bus bus.Bus
+
+	logger *slog.Logger
 }
 
 // BroadcastMsg wraps a message with routing info.
@@ -66,8 +71,8 @@ type UserRoomPresent struct {
 }
 
 // NewHub creates a Hub with initialized maps and channels.
-func NewHub(b bus.Bus) *Hub {
-	return &Hub{
+func NewHub(b bus.Bus, l *slog.Logger) *Hub {
+	newHub := &Hub{
 		clients:        make(map[int64]*Client),
 		rooms:          make(map[int64]map[int64]bool),
 		register:       make(chan *Client),
@@ -75,7 +80,12 @@ func NewHub(b bus.Bus) *Hub {
 		broadcast:      make(chan BroadcastMsg, 256),
 		userRoomUpdate: make(chan UserRoomPresent),
 		bus:            b,
+		logger:         l,
 	}
+
+	b.Subscribe("inbox_entry_updated", newHub.handleInboxEntryUpdated)
+
+	return newHub
 }
 
 // Run starts the Hub event loop. Must be called in a goroutine.
@@ -191,4 +201,37 @@ func (h *Hub) UpdateUserRoomState(roomID int64, userID int64, present bool) {
 		userID:  userID,
 		present: present,
 	}
+}
+
+func (h *Hub) handleInboxEntryUpdated(_ context.Context, e event.Event) error {
+	inboxEvent, ok := e.(event.InboxEntryUpdatedEvent)
+	if !ok {
+		return fmt.Errorf("ws hub: unexpected event type %T", e)
+	}
+
+	p := InboxUpdatedPayload{
+		EntryType:           inboxEvent.EntryType,
+		Kind:                inboxEvent.EntryKind,
+		SourceUserID:        inboxEvent.SourceUserID,
+		SourceUsername:      inboxEvent.SourceUsername,
+		RefRoomID:           inboxEvent.RefRoomID,
+		RefRoomName:         inboxEvent.RefRoomName,
+		RefConversationID:   inboxEvent.RefConversationID,
+		UnreadCount:         inboxEvent.UnreadCount,
+		LastMessageBody:     inboxEvent.LastMessageBody,
+		LastMessageSenderID: inboxEvent.LastMessageSenderID,
+		PeerID:              inboxEvent.PeerID,
+		PeerUsername:        inboxEvent.PeerUsername,
+	}
+
+	payload, err := json.Marshal(p)
+	if err != nil {
+		return fmt.Errorf("ws hub: marshaling inbox payload: %w", err)
+	}
+
+	h.broadcast <- BroadcastMsg{
+		msg:           Message{Type: p.Type(), Payload: payload},
+		targetUserIDs: []int64{inboxEvent.UserID},
+	}
+	return nil
 }

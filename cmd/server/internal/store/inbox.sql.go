@@ -129,14 +129,36 @@ func (q *Queries) SaveInboxRoomEvent(ctx context.Context, arg SaveInboxRoomEvent
 	return err
 }
 
-const updateInboxCursorOnDMMessage = `-- name: UpdateInboxCursorOnDMMessage :exec
-UPDATE inbox_conversations
-SET last_message_body      = $1,
-    last_message_at        = NOW(),
-    last_message_sender_id = $2,
-    unread_count           = unread_count + 1
-WHERE user_id = $3
-  AND ref_conversation_id = $4
+const updateInboxCursorOnDMMessage = `-- name: UpdateInboxCursorOnDMMessage :many
+WITH updated AS (
+    UPDATE inbox_conversations
+    SET last_message_body      = $1,
+        last_message_at        = NOW(),
+        last_message_sender_id = $2,
+        unread_count           = unread_count + 1
+    WHERE user_id = $3
+      AND ref_conversation_id = $4
+    RETURNING id, user_id, ref_room_id, ref_conversation_id, last_read_message_id, created_at, last_message_body, last_message_at, last_message_sender_id, unread_count
+)
+SELECT
+    'conversation'::text   AS entry_type,
+    ''::text               AS kind,
+    0::bigint              AS source_user_id,
+    ''::text               AS source_username,
+    ref_room_id,
+    ref_conversation_id,
+    unread_count::bigint,
+    last_message_body,
+    last_message_sender_id,
+    r.name                 AS room_name,
+    COALESCE(peer.id, 0)   AS peer_id,
+    COALESCE(peer.username, '') AS peer_username,
+    last_message_at     AS created_at,
+    updated.user_id
+FROM updated
+LEFT JOIN rooms r ON r.id = ref_room_id
+LEFT JOIN conversations c ON c.id = ref_conversation_id
+LEFT JOIN users peer ON peer.id = CASE WHEN c.user_a = updated.user_id::bigint THEN c.user_b ELSE c.user_a END
 `
 
 type UpdateInboxCursorOnDMMessageParams struct {
@@ -146,27 +168,99 @@ type UpdateInboxCursorOnDMMessageParams struct {
 	ConversationID pgtype.Int8
 }
 
-// Filtra por user_id con igualdad (en vez de != sender_id) para que el índice
-// parcial inbox_conv_user_conv_uniq (user_id, ref_conversation_id) baje el B-tree
-// directo. Filtrar por la secundaria con != en la leading column fuerza index scan.
-func (q *Queries) UpdateInboxCursorOnDMMessage(ctx context.Context, arg UpdateInboxCursorOnDMMessageParams) error {
-	_, err := q.db.Exec(ctx, updateInboxCursorOnDMMessage,
+type UpdateInboxCursorOnDMMessageRow struct {
+	EntryType           string
+	Kind                string
+	SourceUserID        int64
+	SourceUsername      string
+	RefRoomID           pgtype.Int8
+	RefConversationID   pgtype.Int8
+	UnreadCount         int64
+	LastMessageBody     pgtype.Text
+	LastMessageSenderID pgtype.Int8
+	RoomName            pgtype.Text
+	PeerID              int64
+	PeerUsername        string
+	CreatedAt           pgtype.Timestamptz
+	UserID              int64
+}
+
+// Filters by user_id with equality (instead of != sender_id) so the partial index
+// inbox_conv_user_conv_uniq (user_id, ref_conversation_id) is used directly.
+// Filtering with != on the leading column forces a full index scan.
+func (q *Queries) UpdateInboxCursorOnDMMessage(ctx context.Context, arg UpdateInboxCursorOnDMMessageParams) ([]UpdateInboxCursorOnDMMessageRow, error) {
+	rows, err := q.db.Query(ctx, updateInboxCursorOnDMMessage,
 		arg.Body,
 		arg.SenderID,
 		arg.RecipientID,
 		arg.ConversationID,
 	)
-	return err
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UpdateInboxCursorOnDMMessageRow
+	for rows.Next() {
+		var i UpdateInboxCursorOnDMMessageRow
+		if err := rows.Scan(
+			&i.EntryType,
+			&i.Kind,
+			&i.SourceUserID,
+			&i.SourceUsername,
+			&i.RefRoomID,
+			&i.RefConversationID,
+			&i.UnreadCount,
+			&i.LastMessageBody,
+			&i.LastMessageSenderID,
+			&i.RoomName,
+			&i.PeerID,
+			&i.PeerUsername,
+			&i.CreatedAt,
+			&i.UserID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
-const updateInboxCursorOnRoomMessage = `-- name: UpdateInboxCursorOnRoomMessage :exec
-UPDATE inbox_conversations
-SET last_message_body      = $1,
-    last_message_at        = NOW(),
-    last_message_sender_id = $2,
-    unread_count           = unread_count + 1
-WHERE ref_room_id = $3
-  AND user_id != $2
+const updateInboxCursorOnRoomMessage = `-- name: UpdateInboxCursorOnRoomMessage :many
+WITH updated AS (
+    UPDATE inbox_conversations
+    SET last_message_body      = $1,
+        last_message_at        = NOW(),
+        last_message_sender_id = $2,
+        unread_count           = unread_count + 1
+    WHERE ref_room_id = $3
+      AND user_id != $2
+    RETURNING id, user_id, ref_room_id, ref_conversation_id, last_read_message_id, created_at, last_message_body, last_message_at, last_message_sender_id, unread_count
+)
+SELECT
+    'conversation'::text             AS entry_type,
+    ''::text                         AS kind,
+    0::bigint                        AS source_user_id,
+    ''::text                         AS source_username,
+    updated.ref_room_id,
+    updated.ref_conversation_id,
+    updated.unread_count::bigint    AS unread_count,
+    updated.last_message_body,
+    updated.last_message_sender_id,
+    r.name                           AS room_name,
+    COALESCE(peer.id, 0)             AS peer_id,
+    COALESCE(peer.username, '')      AS peer_username,
+    updated.last_message_at          AS created_at,
+    updated.user_id
+FROM updated
+LEFT JOIN rooms r ON r.id = updated.ref_room_id
+LEFT JOIN conversations c ON c.id = updated.ref_conversation_id
+LEFT JOIN users peer ON peer.id = CASE
+    WHEN c.user_a = updated.user_id THEN c.user_b
+    ELSE c.user_a
+END
 `
 
 type UpdateInboxCursorOnRoomMessageParams struct {
@@ -175,9 +269,56 @@ type UpdateInboxCursorOnRoomMessageParams struct {
 	RoomID   pgtype.Int8
 }
 
-func (q *Queries) UpdateInboxCursorOnRoomMessage(ctx context.Context, arg UpdateInboxCursorOnRoomMessageParams) error {
-	_, err := q.db.Exec(ctx, updateInboxCursorOnRoomMessage, arg.Body, arg.SenderID, arg.RoomID)
-	return err
+type UpdateInboxCursorOnRoomMessageRow struct {
+	EntryType           string
+	Kind                string
+	SourceUserID        int64
+	SourceUsername      string
+	RefRoomID           pgtype.Int8
+	RefConversationID   pgtype.Int8
+	UnreadCount         int64
+	LastMessageBody     pgtype.Text
+	LastMessageSenderID pgtype.Int8
+	RoomName            pgtype.Text
+	PeerID              int64
+	PeerUsername        string
+	CreatedAt           pgtype.Timestamptz
+	UserID              int64
+}
+
+func (q *Queries) UpdateInboxCursorOnRoomMessage(ctx context.Context, arg UpdateInboxCursorOnRoomMessageParams) ([]UpdateInboxCursorOnRoomMessageRow, error) {
+	rows, err := q.db.Query(ctx, updateInboxCursorOnRoomMessage, arg.Body, arg.SenderID, arg.RoomID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UpdateInboxCursorOnRoomMessageRow
+	for rows.Next() {
+		var i UpdateInboxCursorOnRoomMessageRow
+		if err := rows.Scan(
+			&i.EntryType,
+			&i.Kind,
+			&i.SourceUserID,
+			&i.SourceUsername,
+			&i.RefRoomID,
+			&i.RefConversationID,
+			&i.UnreadCount,
+			&i.LastMessageBody,
+			&i.LastMessageSenderID,
+			&i.RoomName,
+			&i.PeerID,
+			&i.PeerUsername,
+			&i.CreatedAt,
+			&i.UserID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const upsertInboxConversationCursor = `-- name: UpsertInboxConversationCursor :exec

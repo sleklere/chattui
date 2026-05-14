@@ -33,8 +33,8 @@ type FeedEntry struct {
 type Store interface {
 	SaveInboxRoomEvent(ctx context.Context, params dbstore.SaveInboxRoomEventParams) error
 	UpsertInboxConversationCursor(ctx context.Context, params dbstore.UpsertInboxConversationCursorParams) error
-	UpdateInboxCursorOnRoomMessage(ctx context.Context, params dbstore.UpdateInboxCursorOnRoomMessageParams) error
-	UpdateInboxCursorOnDMMessage(ctx context.Context, params dbstore.UpdateInboxCursorOnDMMessageParams) error
+	UpdateInboxCursorOnRoomMessage(ctx context.Context, params dbstore.UpdateInboxCursorOnRoomMessageParams) ([]dbstore.UpdateInboxCursorOnRoomMessageRow, error)
+	UpdateInboxCursorOnDMMessage(ctx context.Context, params dbstore.UpdateInboxCursorOnDMMessageParams) ([]dbstore.UpdateInboxCursorOnDMMessageRow, error)
 	ListInboxFeed(ctx context.Context, params dbstore.ListInboxFeedParams) ([]dbstore.ListInboxFeedRow, error)
 }
 
@@ -129,12 +129,17 @@ func (s *Service) handleRoomMessageSent(ctx context.Context, e event.Event) erro
 	if !ok {
 		return fmt.Errorf("inbox: unexpected event type %T", e)
 	}
-	if err := s.store.UpdateInboxCursorOnRoomMessage(ctx, dbstore.UpdateInboxCursorOnRoomMessageParams{
+	feedRows, err := s.store.UpdateInboxCursorOnRoomMessage(ctx, dbstore.UpdateInboxCursorOnRoomMessageParams{
 		Body:     pgtype.Text{String: msgEvent.Body, Valid: true},
 		SenderID: pgtype.Int8{Int64: msgEvent.SenderID, Valid: true},
 		RoomID:   pgtype.Int8{Int64: msgEvent.RoomID, Valid: true},
-	}); err != nil {
+	})
+	if err != nil {
 		s.logger.Warn("inbox: failed to update room cursor", "room_id", msgEvent.RoomID, "error", err)
+	}
+	for _, row := range feedRows {
+		entry := feedEntryFromRoomUpdate(row)
+		s.bus.Publish(ctx, toInboxEntryUpdatedEvent(row.UserID, entry))
 	}
 	return nil
 }
@@ -144,13 +149,18 @@ func (s *Service) handleDMSent(ctx context.Context, e event.Event) error {
 	if !ok {
 		return fmt.Errorf("inbox: unexpected event type %T", e)
 	}
-	if err := s.store.UpdateInboxCursorOnDMMessage(ctx, dbstore.UpdateInboxCursorOnDMMessageParams{
+	feedRows, err := s.store.UpdateInboxCursorOnDMMessage(ctx, dbstore.UpdateInboxCursorOnDMMessageParams{
 		Body:           pgtype.Text{String: msgEvent.Body, Valid: true},
 		SenderID:       pgtype.Int8{Int64: msgEvent.SenderID, Valid: true},
 		RecipientID:    msgEvent.RecipientID,
 		ConversationID: pgtype.Int8{Int64: msgEvent.ConversationID, Valid: true},
-	}); err != nil {
+	})
+	if err != nil {
 		s.logger.Warn("inbox: failed to update dm cursor", "conversation_id", msgEvent.ConversationID, "error", err)
+	}
+	for _, row := range feedRows {
+		entry := feedEntryFromDMUpdate(row)
+		s.bus.Publish(ctx, toInboxEntryUpdatedEvent(row.UserID, entry))
 	}
 	return nil
 }
@@ -163,36 +173,7 @@ func (s *Service) ListByUser(ctx context.Context, userID int64, limit int32) ([]
 	}
 	entries := make([]FeedEntry, len(rows))
 	for i, row := range rows {
-		entries[i] = toFeedEntry(row)
+		entries[i] = feedEntryFromList(row)
 	}
 	return entries, nil
-}
-
-func toFeedEntry(row dbstore.ListInboxFeedRow) FeedEntry {
-	e := FeedEntry{
-		EntryType:      row.EntryType,
-		Kind:           row.Kind,
-		SourceUserID:   row.SourceUserID,
-		SourceUsername: row.SourceUsername,
-		UnreadCount:    row.UnreadCount,
-		PeerID:         row.PeerID,
-		PeerUsername:   row.PeerUsername,
-		CreatedAt:      row.CreatedAt.Time,
-	}
-	if row.RefRoomID.Valid {
-		e.RefRoomID = &row.RefRoomID.Int64
-	}
-	if row.RoomName.Valid {
-		e.RefRoomName = &row.RoomName.String
-	}
-	if row.RefConversationID.Valid {
-		e.RefConversationID = &row.RefConversationID.Int64
-	}
-	if row.LastMessageBody.Valid {
-		e.LastMessageBody = &row.LastMessageBody.String
-	}
-	if row.LastMessageSenderID.Valid {
-		e.LastMessageSenderID = &row.LastMessageSenderID.Int64
-	}
-	return e
 }

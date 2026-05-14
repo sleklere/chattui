@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/lmittmann/tint"
 	"github.com/sleklere/chattui/cmd/server/internal/api"
 	"github.com/sleklere/chattui/cmd/server/internal/api/handlers"
 	"github.com/sleklere/chattui/cmd/server/internal/auth"
@@ -32,11 +33,7 @@ func main() {
 
 	ctx := context.Background()
 
-	options := &slog.HandlerOptions{
-		// Set the minimum level to Debug; logs below this (like Trace if defined) will be ignored.
-		Level: slog.LevelDebug,
-	}
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, options))
+	logger := slog.New(tint.NewHandler(os.Stdout, &tint.Options{Level: slog.LevelDebug}))
 
 	pool, err := db.NewPool(ctx)
 	if err != nil {
@@ -68,7 +65,7 @@ func main() {
 	userSvc := user.NewService(queries, logger)
 	convSvc := conversation.NewService(queries, logger, bus, pool)
 	inboxSvc := inbox.NewService(bus, logger, queries)
-	hub := ws.NewHub(bus)
+	hub := ws.NewHub(bus, logger)
 	go hub.Run()
 
 	// queries satisfies ws.MessageStore directly (has CreateMessage + CreateDirectMessage)

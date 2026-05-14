@@ -65,3 +65,26 @@ type ConversationCreatedEvent struct {
 func (e ConversationCreatedEvent) Kind() string {
 	return "conversation_created"
 }
+
+// InboxEntryUpdatedEvent is published after an inbox cursor is updated.
+// Carries the denormalized entry data so consumers can push it without a DB round-trip.
+type InboxEntryUpdatedEvent struct {
+	UserID              int64
+	EntryType           string
+	EntryKind           string
+	SourceUserID        int64
+	SourceUsername      string
+	RefRoomID           *int64
+	RefRoomName         *string
+	RefConversationID   *int64
+	UnreadCount         int64
+	LastMessageBody     *string
+	LastMessageSenderID *int64
+	PeerID              int64
+	PeerUsername        string
+}
+
+// Kind implements the Event interface.
+func (e InboxEntryUpdatedEvent) Kind() string {
+	return "inbox_entry_updated"
+}

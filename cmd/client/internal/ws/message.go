@@ -24,6 +24,8 @@ const (
 	TypePong    = "pong"
 	TypeError   = "error"
 	TypeSuccess = "success"
+
+	TypeInboxUpdated = "inbox_updated"
 )
 
 // Message is the WebSocket envelope containing a type, payload, and timestamp.
@@ -62,6 +64,22 @@ type UserTypingPayload struct {
 	RoomID   *int64 `json:"room_id,omitempty"`
 	ToUserID *int64 `json:"to_user_id,omitempty"`
 	IsTyping bool   `json:"is_typing"`
+}
+
+// InboxUpdatedPayload is the payload for inbox_updated messages from the server.
+type InboxUpdatedPayload struct {
+	EntryType           string  `json:"entry_type"`
+	Kind                string  `json:"kind"`
+	SourceUserID        int64   `json:"source_user_id"`
+	SourceUsername      string  `json:"source_username"`
+	RefRoomID           *int64  `json:"room_id,omitempty"`
+	RefRoomName         *string `json:"room_name,omitempty"`
+	RefConversationID   *int64  `json:"conversation_id,omitempty"`
+	UnreadCount         int64   `json:"unread_count"`
+	LastMessageBody     *string `json:"last_message_body,omitempty"`
+	LastMessageSenderID *int64  `json:"last_message_sender_id,omitempty"`
+	PeerID              int64   `json:"peer_id"`
+	PeerUsername        string  `json:"peer_username"`
 }
 
 // ErrorPayload is the payload for error messages from the server.

@@ -7,12 +7,15 @@ import (
 	"strings"
 	"time"
 
+	"encoding/json"
+
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sleklere/chattui/cmd/client/internal/api"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/tabbar"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/theme"
+	"github.com/sleklere/chattui/cmd/client/internal/ws"
 )
 
 // LeaveInboxMsg signals that the user wants to go back to rooms.
@@ -179,6 +182,16 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			return m, m.fetchEntries()
 		}
 
+	case ws.IncomingMsg:
+		if msg.Message.Type == ws.TypeInboxUpdated {
+			var p ws.InboxUpdatedPayload
+			if err := json.Unmarshal(msg.Message.Payload, &p); err == nil {
+				entry := inboxEntryFromPayload(p)
+				m.list.SetItems(upsertEntry(m.list.Items(), entry))
+			}
+			return m, nil
+		}
+
 	case entriesLoadedMsg:
 		items := make([]list.Item, len(msg.entries))
 		for i, e := range msg.entries {
@@ -223,6 +236,59 @@ func (m Model) View() string {
 	b.WriteString(helpStyle.Render("tab/shift+tab: switch tabs  r: refresh  esc: back to rooms"))
 
 	return b.String()
+}
+
+func inboxEntryFromPayload(p ws.InboxUpdatedPayload) api.InboxEntry {
+	e := api.InboxEntry{
+		EntryType:         p.EntryType,
+		Kind:              p.Kind,
+		RefConversationID: p.RefConversationID,
+		UnreadCount:       p.UnreadCount,
+		CreatedAt:         time.Now(),
+	}
+	if p.RefRoomID != nil {
+		name := ""
+		if p.RefRoomName != nil {
+			name = *p.RefRoomName
+		}
+		e.Room = &api.InboxRoom{ID: *p.RefRoomID, Name: name}
+	}
+	if p.LastMessageBody != nil {
+		senderID := int64(0)
+		if p.LastMessageSenderID != nil {
+			senderID = *p.LastMessageSenderID
+		}
+		e.LastMessage = &api.InboxLastMessage{Body: *p.LastMessageBody, SenderID: senderID}
+	}
+	if p.PeerID > 0 {
+		e.SourceUser = &api.InboxUser{ID: p.PeerID, Username: p.PeerUsername}
+	} else if p.SourceUserID > 0 {
+		e.SourceUser = &api.InboxUser{ID: p.SourceUserID, Username: p.SourceUsername}
+	}
+	return e
+}
+
+// upsertEntry puts entry at the top of items, replacing any existing entry
+// that refers to the same conversation or room.
+func upsertEntry(items []list.Item, entry api.InboxEntry) []list.Item {
+	result := make([]list.Item, 0, len(items)+1)
+	result = append(result, entryItem{entry: entry})
+	for _, item := range items {
+		if !sameEntry(item.(entryItem).entry, entry) {
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
+func sameEntry(a, b api.InboxEntry) bool {
+	if a.RefConversationID != nil && b.RefConversationID != nil {
+		return *a.RefConversationID == *b.RefConversationID
+	}
+	if a.Room != nil && b.Room != nil {
+		return a.Room.ID == b.Room.ID
+	}
+	return false
 }
 
 func (m Model) fetchEntries() tea.Cmd {

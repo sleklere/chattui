@@ -18,7 +18,7 @@ type Bus interface {
 
 type customBus struct {
 	queue    chan event.Event
-	handlers map[string]func(ctx context.Context, event event.Event) error
+	handlers map[string][]func(ctx context.Context, event event.Event) error
 	logger   *slog.Logger
 }
 
@@ -28,7 +28,7 @@ type customBus struct {
 func NewBus(l *slog.Logger) Bus {
 	b := &customBus{
 		queue:    make(chan event.Event, queueChanSize),
-		handlers: make(map[string]func(ctx context.Context, event event.Event) error),
+		handlers: make(map[string][]func(ctx context.Context, event event.Event) error),
 		logger:   l,
 	}
 
@@ -42,22 +42,24 @@ func (b *customBus) Publish(_ context.Context, event event.Event) {
 }
 
 func (b *customBus) Subscribe(kind string, fn func(ctx context.Context, event event.Event) error) {
-	b.handlers[kind] = fn
+	b.handlers[kind] = append(b.handlers[kind], fn)
 }
 
 func (b *customBus) dispatch() {
 	for e := range b.queue {
-		fn, ok := b.handlers[e.Kind()]
+		handlers, ok := b.handlers[e.Kind()]
 		if !ok {
 			b.logger.Warn("bus: no handler registered", "kind", e.Kind())
 			continue
 		}
-		// TODO: implement semaphore/worker pool to bound concurrency
-		go func() {
-			err := fn(context.Background(), e)
-			if err != nil {
-				b.logger.Error("bus: handler error", "kind", e.Kind(), "error", err)
-			}
-		}()
+		for _, h := range handlers {
+			// TODO: implement semaphore/worker pool to bound concurrency
+			go func() {
+				err := h(context.Background(), e)
+				if err != nil {
+					b.logger.Error("bus: handler error", "kind", e.Kind(), "error", err)
+				}
+			}()
+		}
 	}
 }
