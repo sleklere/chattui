@@ -2,13 +2,13 @@ package inbox
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/sleklere/chattui/cmd/server/internal/bus"
+	"github.com/sleklere/chattui/cmd/server/internal/errs"
 	"github.com/sleklere/chattui/cmd/server/internal/event"
 	dbstore "github.com/sleklere/chattui/cmd/server/internal/store"
 )
@@ -195,10 +195,10 @@ func (s *Service) MarkAsRead(ctx context.Context, conversationID, roomID *int64,
 		set++
 	}
 	if set == 0 {
-		return errors.New("no_params")
+		return errs.ErrNoParams
 	}
 	if set > 1 {
-		return errors.New("extra_params")
+		return errs.ErrAmbiguousParams
 	}
 
 	var err error

@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sleklere/chattui/cmd/server/internal/auth"
+	"github.com/sleklere/chattui/cmd/server/internal/errs"
 	"github.com/sleklere/chattui/cmd/server/internal/httpx"
 )
 
@@ -48,7 +49,18 @@ func (a *API) validateJWT(next http.Handler) http.Handler {
 
 func (a *API) writeError(w http.ResponseWriter, r *http.Request, err error) {
 	var he *httpx.HTTPError
-	if !errors.As(err, &he) {
+	switch {
+	case errors.As(err, &he):
+		// already an HTTPError
+	case errors.Is(err, errs.ErrNotFound):
+		he = &httpx.HTTPError{Status: http.StatusNotFound, Code: "not_found", Msg: "not found", Err: err}
+	case errors.Is(err, errs.ErrForbidden):
+		he = &httpx.HTTPError{Status: http.StatusForbidden, Code: "forbidden", Msg: "forbidden", Err: err}
+	case errors.Is(err, errs.ErrNoParams):
+		he = &httpx.HTTPError{Status: http.StatusBadRequest, Code: "no_params", Msg: err.Error(), Err: err}
+	case errors.Is(err, errs.ErrAmbiguousParams):
+		he = &httpx.HTTPError{Status: http.StatusBadRequest, Code: "ambiguous_params", Msg: err.Error(), Err: err}
+	default:
 		he = &httpx.HTTPError{Status: http.StatusInternalServerError, Code: "internal", Msg: "internal error", Err: err}
 	}
 

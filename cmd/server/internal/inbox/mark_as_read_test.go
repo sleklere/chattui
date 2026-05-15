@@ -2,8 +2,10 @@ package inbox
 
 import (
 	"context"
+	"errors"
 	"testing"
 
+	"github.com/sleklere/chattui/cmd/server/internal/errs"
 	dbstore "github.com/sleklere/chattui/cmd/server/internal/store"
 	"github.com/sleklere/chattui/cmd/server/internal/testhelper"
 )
@@ -60,21 +62,20 @@ func TestMarkAsRead_Validation(t *testing.T) {
 		conversationID *int64
 		roomID         *int64
 		all            bool
-		wantErr        string
+		wantErr        error
 	}{
-		{"no params", nil, nil, false, "no_params"},
-		{"conversation + room", ptrInt64(1), ptrInt64(2), false, "extra_params"},
-		{"conversation + all", ptrInt64(1), nil, true, "extra_params"},
-		{"room + all", nil, ptrInt64(1), true, "extra_params"},
-		{"all three", ptrInt64(1), ptrInt64(2), true, "extra_params"},
+		{"no params", nil, nil, false, errs.ErrNoParams},
+		{"conversation + room", ptrInt64(1), ptrInt64(2), false, errs.ErrAmbiguousParams},
+		{"conversation + all", ptrInt64(1), nil, true, errs.ErrAmbiguousParams},
+		{"room + all", nil, ptrInt64(1), true, errs.ErrAmbiguousParams},
+		{"all three", ptrInt64(1), ptrInt64(2), true, errs.ErrAmbiguousParams},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			svc := newStubSvc(&stubStore{})
-			err := svc.MarkAsRead(ctx, tc.conversationID, tc.roomID, tc.all, 1)
-			if err == nil || err.Error() != tc.wantErr {
-				t.Errorf("want error %q, got %v", tc.wantErr, err)
+			err := newStubSvc(&stubStore{}).MarkAsRead(ctx, tc.conversationID, tc.roomID, tc.all, 1)
+			if !errors.Is(err, tc.wantErr) {
+				t.Errorf("want %v, got %v", tc.wantErr, err)
 			}
 		})
 	}
