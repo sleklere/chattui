@@ -53,6 +53,10 @@ type entriesLoadedMsg struct {
 	entries []dto.InboxFeed
 }
 
+type markedAsReadMsg struct {
+	entry dto.InboxFeed
+}
+
 type entryItem struct {
 	entry dto.InboxFeed
 }
@@ -202,9 +206,19 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			return m, func() tea.Msg { return ShowDMsMsg{} }
 		case "r":
 			return m, m.fetchEntries()
+		case "m":
+			if item, ok := m.list.SelectedItem().(entryItem); ok {
+				if item.entry.UnreadCount > 0 {
+					return m, markAsReadCmd(m.apiClient, item.entry)
+				}
+			}
 		case "enter":
 			if item, ok := m.list.SelectedItem().(entryItem); ok {
-				return m, openEntry(item.entry)
+				cmds := []tea.Cmd{openEntry(item.entry)}
+				if item.entry.UnreadCount > 0 {
+					cmds = append(cmds, markAsReadCmd(m.apiClient, item.entry))
+				}
+				return m, tea.Batch(cmds...)
 			}
 		}
 
@@ -221,6 +235,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+
+	case markedAsReadMsg:
+		items := zeroUnreadCount(m.list.Items(), msg.entry)
+		m.list.SetItems(items)
+		badges := computeBadges(items)
+		m.roomsTotal = badges.RoomsTotal()
+		m.dmsTotal = badges.DmsTotal()
+		return m, func() tea.Msg { return badges }
 
 	case entriesLoadedMsg:
 		items := make([]list.Item, len(msg.entries))
@@ -266,9 +288,40 @@ func (m Model) View() string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString(helpStyle.Render("tab/shift+tab: switch tabs  r: refresh  esc: back to rooms"))
+	b.WriteString(helpStyle.Render("tab/shift+tab: switch tabs  r: refresh  m: mark as read  esc: back to rooms"))
 
 	return b.String()
+}
+
+func markAsReadCmd(client *api.Client, e dto.InboxFeed) tea.Cmd {
+	return func() tea.Msg {
+		var convID *int64
+		var roomID *int64
+		if e.RefConversationID != nil {
+			convID = e.RefConversationID
+		} else if e.Room != nil {
+			roomID = &e.Room.ID
+		}
+		if convID == nil && roomID == nil {
+			return nil
+		}
+		_ = client.MarkAsRead(convID, roomID, false)
+		return markedAsReadMsg{entry: e}
+	}
+}
+
+func zeroUnreadCount(items []list.Item, entry dto.InboxFeed) []list.Item {
+	result := make([]list.Item, len(items))
+	for i, item := range items {
+		e := item.(entryItem).entry
+		if sameEntry(e, entry) {
+			e.UnreadCount = 0
+			result[i] = entryItem{entry: e}
+		} else {
+			result[i] = item
+		}
+	}
+	return result
 }
 
 func openEntry(e dto.InboxFeed) tea.Cmd {
