@@ -91,6 +91,11 @@ func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{textinput.Blink}
 	if m.conversationID != 0 {
 		cmds = append(cmds, m.loadHistory())
+		convID := m.conversationID
+		cmds = append(cmds, func() tea.Msg {
+			_ = m.apiClient.MarkAsRead(&convID, nil, false)
+			return nil
+		})
 	}
 	return tea.Batch(cmds...)
 }

@@ -83,9 +83,14 @@ func New(
 
 // Init initializes the chat model.
 func (m Model) Init() tea.Cmd {
+	roomID := m.room.ID
 	return tea.Batch(
 		m.loadHistory(),
 		textinput.Blink,
+		func() tea.Msg {
+			_ = m.apiClient.MarkAsRead(nil, &roomID, false)
+			return nil
+		},
 	)
 }
 

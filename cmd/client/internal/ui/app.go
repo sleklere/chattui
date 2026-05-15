@@ -187,7 +187,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.state.CurrentRoom = nil
 		a.active = screenRooms
 		a.rooms = rooms.New(a.state.APIClient, a.state.RoomBadges, a.badgeTotal(), a.width, a.height)
-		return a, a.rooms.Init()
+		return a, tea.Batch(a.rooms.Init(), inbox.FetchBadgesCmd(a.state.APIClient))
 
 	case rooms.ShowDMsMsg:
 		a.active = screenDM
@@ -234,7 +234,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dmchat.LeaveDMMsg:
 		a.active = screenDM
 		a.dm = dm.New(a.state.APIClient, a.state.ConvBadges, a.badgeTotal(), a.width, a.height)
-		return a, a.dm.Init()
+		return a, tea.Batch(a.dm.Init(), inbox.FetchBadgesCmd(a.state.APIClient))
 
 	case rooms.ShowInboxMsg, dm.ShowInboxMsg:
 		a.active = screenInbox
