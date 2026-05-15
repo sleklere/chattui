@@ -120,3 +120,21 @@ WHERE ic.user_id = @user_id
   AND ic.last_message_at IS NOT NULL
 ORDER BY created_at DESC
 LIMIT @lim;
+
+-- name: ResetRoomUnreadCount :exec
+UPDATE inbox_conversations
+SET unread_count = 0
+WHERE ref_room_id = @room_id
+AND user_id = @user_id;
+
+-- name: ResetDMUnreadCount :exec
+UPDATE inbox_conversations
+SET unread_count = 0
+WHERE ref_conversation_id = @conversation_id
+AND user_id = @user_id;
+
+-- name: ResetAllUnreadCount :exec
+UPDATE inbox_conversations
+SET unread_count = 0
+WHERE user_id = @user_id;
+

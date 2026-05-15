@@ -2,6 +2,7 @@ package inbox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -36,6 +37,9 @@ type Store interface {
 	UpdateInboxCursorOnRoomMessage(ctx context.Context, params dbstore.UpdateInboxCursorOnRoomMessageParams) ([]dbstore.UpdateInboxCursorOnRoomMessageRow, error)
 	UpdateInboxCursorOnDMMessage(ctx context.Context, params dbstore.UpdateInboxCursorOnDMMessageParams) ([]dbstore.UpdateInboxCursorOnDMMessageRow, error)
 	ListInboxFeed(ctx context.Context, params dbstore.ListInboxFeedParams) ([]dbstore.ListInboxFeedRow, error)
+	ResetRoomUnreadCount(ctx context.Context, params dbstore.ResetRoomUnreadCountParams) error
+	ResetDMUnreadCount(ctx context.Context, params dbstore.ResetDMUnreadCountParams) error
+	ResetAllUnreadCount(ctx context.Context, userID int64) error
 }
 
 // Service handles inbox events and persists them to the inbox tables.
@@ -176,4 +180,43 @@ func (s *Service) ListByUser(ctx context.Context, userID int64, limit int32) ([]
 		entries[i] = feedEntryFromList(row)
 	}
 	return entries, nil
+}
+
+// MarkAsRead resets the unread count for a specific room, DM conversation, or all entries for the user.
+func (s *Service) MarkAsRead(ctx context.Context, conversationID, roomID *int64, all bool, userID int64) error {
+	set := 0
+	if conversationID != nil {
+		set++
+	}
+	if roomID != nil {
+		set++
+	}
+	if all {
+		set++
+	}
+	if set == 0 {
+		return errors.New("no_params")
+	}
+	if set > 1 {
+		return errors.New("extra_params")
+	}
+
+	var err error
+	if conversationID != nil {
+		err = s.store.ResetDMUnreadCount(ctx,
+			dbstore.ResetDMUnreadCountParams{
+				ConversationID: pgtype.Int8{Int64: *conversationID, Valid: true},
+				UserID:         userID,
+			})
+	} else if roomID != nil {
+		err = s.store.ResetRoomUnreadCount(ctx,
+			dbstore.ResetRoomUnreadCountParams{
+				RoomID: pgtype.Int8{Int64: *roomID, Valid: true},
+				UserID: userID,
+			})
+	} else if all {
+		err = s.store.ResetAllUnreadCount(ctx, userID)
+	}
+
+	return err
 }

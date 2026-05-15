@@ -295,3 +295,134 @@ func TestHandleDMSent_UpdatesCursorForRecipient(t *testing.T) {
 		t.Errorf("peer_username: want %q, got %q", sender.Username, feed[0].PeerUsername)
 	}
 }
+
+func TestMarkAsRead_ResetsRoomUnreadCount(t *testing.T) {
+	if testPool == nil {
+		t.Skip("testcontainers not available")
+	}
+	ctx := context.Background()
+	_, q := testhelper.NewTx(t, testPool)
+	svc := newInboxSvc(t, q)
+
+	memberID, senderID, roomID := setup(t, q, "mark-room")
+	for _, uid := range []int64{memberID, senderID} {
+		if err := svc.handleRoomJoined(ctx, event.RoomJoinedEvent{RoomID: roomID, UserID: uid}); err != nil {
+			t.Fatalf("handleRoomJoined uid=%d: %v", uid, err)
+		}
+	}
+	if err := svc.handleRoomMessageSent(ctx, event.RoomMessageSentEvent{
+		RoomID: roomID, SenderID: senderID, Body: "hello",
+	}); err != nil {
+		t.Fatalf("handleRoomMessageSent: %v", err)
+	}
+
+	if err := svc.MarkAsRead(ctx, nil, &roomID, false, memberID); err != nil {
+		t.Fatalf("MarkAsRead: %v", err)
+	}
+
+	feed, err := q.ListInboxFeed(ctx, dbstore.ListInboxFeedParams{UserID: memberID, Lim: 10})
+	if err != nil {
+		t.Fatalf("ListInboxFeed: %v", err)
+	}
+	for _, row := range feed {
+		if row.EntryType == "conversation" && row.UnreadCount != 0 {
+			t.Errorf("expected unread_count=0, got %d", row.UnreadCount)
+		}
+	}
+}
+
+func TestMarkAsRead_ResetsDMUnreadCount(t *testing.T) {
+	if testPool == nil {
+		t.Skip("testcontainers not available")
+	}
+	ctx := context.Background()
+	_, q := testhelper.NewTx(t, testPool)
+	svc := newInboxSvc(t, q)
+
+	sender, err := q.CreateUser(ctx, dbstore.CreateUserParams{Username: "mark-dm-sender", Password: "x"})
+	if err != nil {
+		t.Fatalf("create sender: %v", err)
+	}
+	recipient, err := q.CreateUser(ctx, dbstore.CreateUserParams{Username: "mark-dm-recipient", Password: "x"})
+	if err != nil {
+		t.Fatalf("create recipient: %v", err)
+	}
+	conv, err := q.GetOrCreateConversation(ctx, dbstore.GetOrCreateConversationParams{UserA: sender.ID, UserB: recipient.ID})
+	if err != nil {
+		t.Fatalf("GetOrCreateConversation: %v", err)
+	}
+	if err := svc.handleConversationCreated(ctx, event.ConversationCreatedEvent{
+		ConversationID: conv.ID, UserAID: sender.ID, UserBID: recipient.ID,
+	}); err != nil {
+		t.Fatalf("handleConversationCreated: %v", err)
+	}
+	if err := svc.handleDMSent(ctx, event.DirectMessageSentEvent{
+		ConversationID: conv.ID, SenderID: sender.ID, RecipientID: recipient.ID, Body: "hey",
+	}); err != nil {
+		t.Fatalf("handleDMSent: %v", err)
+	}
+
+	if err := svc.MarkAsRead(ctx, &conv.ID, nil, false, recipient.ID); err != nil {
+		t.Fatalf("MarkAsRead: %v", err)
+	}
+
+	feed, err := q.ListInboxFeed(ctx, dbstore.ListInboxFeedParams{UserID: recipient.ID, Lim: 10})
+	if err != nil {
+		t.Fatalf("ListInboxFeed: %v", err)
+	}
+	for _, row := range feed {
+		if row.EntryType == "conversation" && row.UnreadCount != 0 {
+			t.Errorf("expected unread_count=0, got %d", row.UnreadCount)
+		}
+	}
+}
+
+func TestMarkAsRead_ResetsAll(t *testing.T) {
+	if testPool == nil {
+		t.Skip("testcontainers not available")
+	}
+	ctx := context.Background()
+	_, q := testhelper.NewTx(t, testPool)
+	svc := newInboxSvc(t, q)
+
+	memberID, senderID, roomID := setup(t, q, "mark-all")
+	for _, uid := range []int64{memberID, senderID} {
+		if err := svc.handleRoomJoined(ctx, event.RoomJoinedEvent{RoomID: roomID, UserID: uid}); err != nil {
+			t.Fatalf("handleRoomJoined uid=%d: %v", uid, err)
+		}
+	}
+	if err := svc.handleRoomMessageSent(ctx, event.RoomMessageSentEvent{
+		RoomID: roomID, SenderID: senderID, Body: "hello",
+	}); err != nil {
+		t.Fatalf("handleRoomMessageSent: %v", err)
+	}
+
+	conv, err := q.GetOrCreateConversation(ctx, dbstore.GetOrCreateConversationParams{UserA: senderID, UserB: memberID})
+	if err != nil {
+		t.Fatalf("GetOrCreateConversation: %v", err)
+	}
+	if err := svc.handleConversationCreated(ctx, event.ConversationCreatedEvent{
+		ConversationID: conv.ID, UserAID: senderID, UserBID: memberID,
+	}); err != nil {
+		t.Fatalf("handleConversationCreated: %v", err)
+	}
+	if err := svc.handleDMSent(ctx, event.DirectMessageSentEvent{
+		ConversationID: conv.ID, SenderID: senderID, RecipientID: memberID, Body: "hey",
+	}); err != nil {
+		t.Fatalf("handleDMSent: %v", err)
+	}
+
+	if err := svc.MarkAsRead(ctx, nil, nil, true, memberID); err != nil {
+		t.Fatalf("MarkAsRead all: %v", err)
+	}
+
+	feed, err := q.ListInboxFeed(ctx, dbstore.ListInboxFeedParams{UserID: memberID, Lim: 10})
+	if err != nil {
+		t.Fatalf("ListInboxFeed: %v", err)
+	}
+	for _, row := range feed {
+		if row.EntryType == "conversation" && row.UnreadCount != 0 {
+			t.Errorf("expected unread_count=0, got %d (entry=%s)", row.UnreadCount, row.EntryType)
+		}
+	}
+}

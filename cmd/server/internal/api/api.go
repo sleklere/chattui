@@ -70,6 +70,7 @@ func (a *API) registerInboxRoutes(r chi.Router) {
 	h := handlers.NewInboxHandler(a.Logger, a.InboxService)
 	r.Route("/inbox", func(r chi.Router) {
 		r.Get("/", a.handle(h.List))
+		r.Post("/read", a.handle(h.MarkAsRead))
 	})
 }
 

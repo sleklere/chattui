@@ -110,6 +110,51 @@ func (q *Queries) ListInboxFeed(ctx context.Context, arg ListInboxFeedParams) ([
 	return items, nil
 }
 
+const resetAllUnreadCount = `-- name: ResetAllUnreadCount :exec
+UPDATE inbox_conversations
+SET unread_count = 0
+WHERE user_id = $1
+`
+
+func (q *Queries) ResetAllUnreadCount(ctx context.Context, userID int64) error {
+	_, err := q.db.Exec(ctx, resetAllUnreadCount, userID)
+	return err
+}
+
+const resetDMUnreadCount = `-- name: ResetDMUnreadCount :exec
+UPDATE inbox_conversations
+SET unread_count = 0
+WHERE ref_conversation_id = $1
+AND user_id = $2
+`
+
+type ResetDMUnreadCountParams struct {
+	ConversationID pgtype.Int8
+	UserID         int64
+}
+
+func (q *Queries) ResetDMUnreadCount(ctx context.Context, arg ResetDMUnreadCountParams) error {
+	_, err := q.db.Exec(ctx, resetDMUnreadCount, arg.ConversationID, arg.UserID)
+	return err
+}
+
+const resetRoomUnreadCount = `-- name: ResetRoomUnreadCount :exec
+UPDATE inbox_conversations
+SET unread_count = 0
+WHERE ref_room_id = $1
+AND user_id = $2
+`
+
+type ResetRoomUnreadCountParams struct {
+	RoomID pgtype.Int8
+	UserID int64
+}
+
+func (q *Queries) ResetRoomUnreadCount(ctx context.Context, arg ResetRoomUnreadCountParams) error {
+	_, err := q.db.Exec(ctx, resetRoomUnreadCount, arg.RoomID, arg.UserID)
+	return err
+}
+
 const saveInboxRoomEvent = `-- name: SaveInboxRoomEvent :exec
 INSERT INTO inbox_events (user_id, kind, room_id, source_user_id)
     SELECT rm.user_id, $1, $2, $3

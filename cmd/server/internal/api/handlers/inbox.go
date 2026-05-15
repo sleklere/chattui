@@ -1,10 +1,14 @@
 package handlers
 
 import (
+	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 
+	"github.com/sleklere/chattui/cmd/server/internal/api/dto/request"
 	"github.com/sleklere/chattui/cmd/server/internal/auth"
+	"github.com/sleklere/chattui/cmd/server/internal/errs"
 	"github.com/sleklere/chattui/cmd/server/internal/httpx"
 	"github.com/sleklere/chattui/cmd/server/internal/inbox"
 	"github.com/sleklere/chattui/pkg/dto"
@@ -35,6 +39,26 @@ func (h *InboxHandler) List(w http.ResponseWriter, r *http.Request) error {
 		res[i] = toInboxRes(e)
 	}
 	return httpx.JSON(w, http.StatusOK, res)
+}
+
+// MarkAsRead handles resetting the unread count for a room, DM conversation, or all entries.
+func (h *InboxHandler) MarkAsRead(w http.ResponseWriter, r *http.Request) error {
+	claims, _ := auth.ClaimsFromCtx(r.Context())
+
+	var req request.MarkAsReadReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return httpx.BadRequest("invalid_json", "invalid json", err)
+	}
+
+	err := h.inboxSvc.MarkAsRead(r.Context(), req.ConversationID, req.RoomID, req.All, claims.UserID)
+	if err != nil {
+		if errors.Is(err, errs.ErrNoParams) || errors.Is(err, errs.ErrAmbiguousParams) {
+			return httpx.BadRequest("invalid_parameters", "invalid parameters", err)
+		}
+		return err
+	}
+
+	return httpx.JSON(w, http.StatusNoContent, nil)
 }
 
 func toInboxRes(e inbox.FeedEntry) dto.InboxFeed {
