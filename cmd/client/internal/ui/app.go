@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/sleklere/chattui/cmd/client/internal/api"
 	"github.com/sleklere/chattui/cmd/client/internal/config"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/auth"
@@ -15,9 +17,12 @@ import (
 	"github.com/sleklere/chattui/cmd/client/internal/ui/dmchat"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/inbox"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/rooms"
+	"github.com/sleklere/chattui/cmd/client/internal/ui/theme"
 	"github.com/sleklere/chattui/cmd/client/internal/ws"
 	"github.com/sleklere/chattui/pkg/dto"
 )
+
+type clearWSStatusMsg struct{}
 
 type wsConnectedMsg struct {
 	client *ws.Client
@@ -55,6 +60,7 @@ type App struct {
 	active   screen
 	width    int
 	height   int
+	wsStatus string
 
 	auth   auth.Model
 	rooms  rooms.Model
@@ -148,6 +154,20 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case wsConnectedMsg:
 		a.wsClient = msg.client
 		a.state.Logger.Info("websocket connected at app level")
+		return a, nil
+
+	case ws.ReconnectingMsg:
+		a.wsStatus = "reconnecting..."
+		return a, nil
+
+	case ws.ConnectedMsg:
+		a.wsStatus = "reconnected successfully"
+		return a, tea.Tick(2*time.Second, func(_ time.Time) tea.Msg {
+			return clearWSStatusMsg{}
+		})
+
+	case clearWSStatusMsg:
+		a.wsStatus = ""
 		return a, nil
 
 	case inbox.BadgesMsg:
@@ -316,21 +336,27 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the active screen.
 func (a *App) View() string {
+	var view string
 	switch a.active {
 	case screenAuth:
-		return a.auth.View()
+		view = a.auth.View()
 	case screenRooms:
-		return a.rooms.View()
+		view = a.rooms.View()
 	case screenChat:
-		return a.chat.View()
+		view = a.chat.View()
 	case screenDM:
-		return a.dm.View()
+		view = a.dm.View()
 	case screenDMChat:
-		return a.dmChat.View()
+		view = a.dmChat.View()
 	case screenInbox:
-		return a.inbox.View()
+		view = a.inbox.View()
 	}
-	return ""
+	if a.wsStatus != "" {
+		t := theme.Current
+		statusStyle := lipgloss.NewStyle().Foreground(t.Accent).Italic(true)
+		view += "\n" + statusStyle.Render(a.wsStatus)
+	}
+	return view
 }
 
 func (a *App) badgeTotal() int64 {

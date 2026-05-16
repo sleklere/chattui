@@ -22,8 +22,11 @@ type ErrorMsg struct {
 	Err error
 }
 
-// ConnectedMsg signals that the WebSocket connection is established.
+// ConnectedMsg signals that the WebSocket connection is established or re-established.
 type ConnectedMsg struct{}
+
+// ReconnectingMsg signals that the WebSocket connection was lost and a reconnect is in progress.
+type ReconnectingMsg struct{}
 
 // Client manages a WebSocket connection to the chat server.
 type Client struct {
@@ -73,6 +76,7 @@ func runLoopsWithRetry(generalCtx context.Context, c *Client, url string, header
 		done := make(chan struct{}, 2)
 		go runWithConn(generalCtx, c, done)
 		<-done
+		c.program.Send(ReconnectingMsg{})
 
 		select {
 		case <-time.After(backoff):
@@ -89,6 +93,7 @@ func runLoopsWithRetry(generalCtx context.Context, c *Client, url string, header
 			continue
 		}
 		c.conn = conn
+		c.program.Send(ConnectedMsg{})
 	}
 }
 
