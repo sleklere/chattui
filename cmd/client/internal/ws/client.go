@@ -35,20 +35,20 @@ type Client struct {
 }
 
 // Connect establishes a WebSocket connection and starts read/write loops.
-func Connect(ctx context.Context, wsURL, token string, program *tea.Program, logger *slog.Logger) (*Client, error) {
+func Connect(generalCtx context.Context, wsURL, token string, program *tea.Program, logger *slog.Logger) (*Client, error) {
 	url := wsURL + "/api/v1/ws"
 
 	headers := http.Header{}
 	headers.Set("Authorization", "Bearer "+token)
 
-	conn, _, err := websocket.Dial(ctx, url, &websocket.DialOptions{
+	conn, _, err := websocket.Dial(generalCtx, url, &websocket.DialOptions{
 		HTTPHeader: headers,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
+	generalCtx, cancel := context.WithCancel(generalCtx)
 
 	c := &Client{
 		conn:    conn,
@@ -58,11 +58,46 @@ func Connect(ctx context.Context, wsURL, token string, program *tea.Program, log
 		cancel:  cancel,
 	}
 
-	go c.readLoop(ctx)
-	go c.writeLoop(ctx)
+	go runLoopsWithRetry(generalCtx, c, url, headers)
 
 	logger.Info("websocket connected", "url", url)
 	return c, nil
+}
+
+// 10min
+const maxBackoffSecs = 600
+
+func runLoopsWithRetry(generalCtx context.Context, c *Client, url string, headers http.Header) {
+	backoff := time.Second
+	for {
+		done := make(chan struct{}, 2)
+		go runWithConn(generalCtx, c, done)
+		<-done
+
+		select {
+		case <-time.After(backoff):
+		case <-generalCtx.Done():
+			return
+		}
+		backoff = min(backoff*2, maxBackoffSecs*time.Second)
+
+		conn, _, err := websocket.Dial(generalCtx, url, &websocket.DialOptions{
+			HTTPHeader: headers,
+		})
+		if err != nil {
+			c.logger.Warn("error reconnecting to websocket")
+			continue
+		}
+		c.conn = conn
+	}
+}
+
+func runWithConn(generalCtx context.Context, c *Client, done chan struct{}) {
+	loopsCtx, cancel := context.WithCancel(generalCtx)
+	go readLoop(loopsCtx, c, cancel)
+	go writeLoop(loopsCtx, c, cancel)
+	<-loopsCtx.Done()
+	done <- struct{}{}
 }
 
 // Send enqueues a message for sending over the WebSocket connection.
@@ -113,16 +148,16 @@ func (c *Client) Close() {
 	c.logger.Info("websocket closed")
 }
 
-func (c *Client) readLoop(ctx context.Context) {
+func readLoop(loopsCtx context.Context, c *Client, cancel context.CancelFunc) {
 	for {
-		_, data, err := c.conn.Read(ctx)
+		_, data, err := c.conn.Read(loopsCtx)
 		if err != nil {
-			if ctx.Err() != nil {
-				return
+			if loopsCtx.Err() != nil {
+				break
 			}
 			c.logger.Error("ws read error", "error", err)
 			c.program.Send(ErrorMsg{Err: err})
-			return
+			break
 		}
 
 		var msg Message
@@ -134,16 +169,19 @@ func (c *Client) readLoop(ctx context.Context) {
 		c.logger.Debug("ws received", "type", msg.Type)
 		c.program.Send(IncomingMsg{Message: msg})
 	}
+
+	cancel()
 }
 
-func (c *Client) writeLoop(ctx context.Context) {
+func writeLoop(loopsCtx context.Context, c *Client, cancel context.CancelFunc) {
+outer:
 	for {
 		select {
-		case <-ctx.Done():
+		case <-loopsCtx.Done():
 			return
 		case msg, ok := <-c.sendCh:
 			if !ok {
-				return
+				break outer
 			}
 
 			data, err := json.Marshal(msg)
@@ -152,16 +190,17 @@ func (c *Client) writeLoop(ctx context.Context) {
 				continue
 			}
 
-			if err := c.conn.Write(ctx, websocket.MessageText, data); err != nil {
-				if ctx.Err() != nil {
-					return
+			if err := c.conn.Write(loopsCtx, websocket.MessageText, data); err != nil {
+				if loopsCtx.Err() != nil {
+					break outer
 				}
 				c.logger.Error("ws write error", "error", err)
 				c.program.Send(ErrorMsg{Err: err})
-				return
+				break outer
 			}
 
 			c.logger.Debug("ws sent", "type", msg.Type)
 		}
 	}
+	cancel()
 }
