@@ -27,7 +27,10 @@ For local development against a running Go toolchain, see the `Makefile`.
 - Direct messages (1-to-1)
 - Message history (REST)
 - Notification inbox (room events + unread message counts)
-- Multiple themes: Catppuccin, Rose-Pine, Kanagawa
+- Multiple themes: Catppuccin, Rose-Pine, Kanagawa (`t` on the rooms screen)
+- Shared app frame: tab bar with unread badges, live connection indicator, contextual key bar
+- Grouped message transcript with per-user colors, day separators and word wrap
+- Filterable lists (`/`), key reference overlay (`?`), empty and loading states
 
 ## Project layout
 
@@ -50,7 +53,11 @@ cmd/
     internal/
       api/         # HTTP client
       ws/          # WebSocket client
-      ui/          # Screens (auth, rooms, chat, dm)
+      ui/          # Screens (auth, rooms, chat, dm, dmchat, inbox)
+        hud/       # Persistent frame: top bar, key bar, modals, help overlay
+        components/# List rows, badges, empty states, rules
+        chatview/  # Message history + composer rendering
+        theme/     # Color palettes
 ```
 
 ## Architecture
