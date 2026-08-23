@@ -2,6 +2,7 @@
 package theme
 
 import (
+	"hash/fnv"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,6 +35,9 @@ type Theme struct {
 	// Message colors
 	OwnMsg   lipgloss.Color // own messages highlight
 	OtherMsg lipgloss.Color // other users' names
+
+	// Speakers is the palette used to give each username its own stable color.
+	Speakers []lipgloss.Color
 }
 
 // Current is the active theme. Set via SetTheme.
@@ -49,6 +53,18 @@ func SetTheme(name string) {
 	default:
 		Current = CatppuccinMocha()
 	}
+}
+
+// SpeakerColor returns a stable color for a username, so the same person keeps
+// the same color across sessions and screens.
+func SpeakerColor(username string) lipgloss.Color {
+	palette := Current.Speakers
+	if len(palette) == 0 {
+		return Current.OtherMsg
+	}
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(strings.ToLower(username)))
+	return palette[int(h.Sum32())%len(palette)]
 }
 
 // CatppuccinMocha returns the Catppuccin Mocha color palette.
@@ -67,6 +83,10 @@ func CatppuccinMocha() Theme {
 		Success:  lipgloss.Color("#a6e3a1"), // green
 		OwnMsg:   lipgloss.Color("#94e2d5"), // teal
 		OtherMsg: lipgloss.Color("#89dceb"), // sky
+		Speakers: []lipgloss.Color{
+			"#89dceb", "#f5c2e7", "#a6e3a1", "#fab387",
+			"#89b4fa", "#f9e2af", "#cba6f7", "#94e2d5",
+		},
 	}
 }
 
@@ -86,6 +106,33 @@ func RosePine() Theme {
 		Success:  lipgloss.Color("#9ccfd8"), // foam
 		OwnMsg:   lipgloss.Color("#ebbcba"), // rose
 		OtherMsg: lipgloss.Color("#c4a7e7"), // iris
+		Speakers: []lipgloss.Color{
+			"#9ccfd8", "#ebbcba", "#c4a7e7", "#f6c177",
+			"#eb6f92", "#31748f", "#e0def4", "#908caa",
+		},
+	}
+}
+
+// KanagawaDragon returns the Kanagawa Dragon color palette.
+func KanagawaDragon() Theme {
+	return Theme{
+		Name:     "kanagawa",
+		Base:     lipgloss.Color("#181616"),
+		Surface:  lipgloss.Color("#282727"),
+		Overlay:  lipgloss.Color("#393836"),
+		Text:     lipgloss.Color("#c5c9c5"),
+		Subtle:   lipgloss.Color("#727169"),
+		Accent:   lipgloss.Color("#7e9cd8"), // crystal blue
+		Second:   lipgloss.Color("#7fb4ca"), // spring blue
+		Gold:     lipgloss.Color("#e6c384"), // carp yellow
+		Error:    lipgloss.Color("#c34043"), // samurai red
+		Success:  lipgloss.Color("#98bb6c"), // spring green
+		OwnMsg:   lipgloss.Color("#d27e99"), // sakura pink
+		OtherMsg: lipgloss.Color("#7fb4ca"), // spring blue
+		Speakers: []lipgloss.Color{
+			"#7fb4ca", "#d27e99", "#98bb6c", "#e6c384",
+			"#7e9cd8", "#c0a36e", "#a292a3", "#8ea4a2",
+		},
 	}
 }
 
@@ -121,23 +168,4 @@ func Save() error {
 		return err
 	}
 	return os.WriteFile(p, []byte(Current.Name), 0o644)
-}
-
-// KanagawaDragon returns the Kanagawa Dragon color palette.
-func KanagawaDragon() Theme {
-	return Theme{
-		Name:     "kanagawa",
-		Base:     lipgloss.Color("#181616"),
-		Surface:  lipgloss.Color("#282727"),
-		Overlay:  lipgloss.Color("#393836"),
-		Text:     lipgloss.Color("#c5c9c5"),
-		Subtle:   lipgloss.Color("#727169"),
-		Accent:   lipgloss.Color("#7e9cd8"), // crystal blue
-		Second:   lipgloss.Color("#7fb4ca"), // spring blue
-		Gold:     lipgloss.Color("#e6c384"), // carp yellow
-		Error:    lipgloss.Color("#c34043"), // samurai red
-		Success:  lipgloss.Color("#98bb6c"), // spring green
-		OwnMsg:   lipgloss.Color("#d27e99"), // sakura pink
-		OtherMsg: lipgloss.Color("#7fb4ca"), // spring blue
-	}
 }
