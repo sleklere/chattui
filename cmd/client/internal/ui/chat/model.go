@@ -3,16 +3,16 @@ package chat
 
 import (
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/sleklere/chattui/cmd/client/internal/api"
-	"github.com/sleklere/chattui/cmd/client/internal/ui/theme"
+	"github.com/sleklere/chattui/cmd/client/internal/ui/chatview"
+	"github.com/sleklere/chattui/cmd/client/internal/ui/components"
+	"github.com/sleklere/chattui/cmd/client/internal/ui/hud"
 	"github.com/sleklere/chattui/cmd/client/internal/ws"
 	"github.com/sleklere/chattui/pkg/dto"
 )
@@ -36,17 +36,11 @@ type Model struct {
 
 	viewport viewport.Model
 	input    textinput.Model
-	messages []chatMessage
+	messages []chatview.Message
+	loading  bool
 	err      string
 	width    int
 	height   int
-}
-
-type chatMessage struct {
-	senderID       int64
-	senderUsername string
-	content        string
-	timestamp      string
 }
 
 // New creates a new chat Model for the given room.
@@ -59,13 +53,14 @@ func New(
 	username string,
 	width, height int,
 ) Model {
-	vp := viewport.New(width, height-4)
+	vp := viewport.New(width, historyHeight(height))
 
 	input := textinput.New()
-	input.Placeholder = "type a message..."
+	input.Placeholder = "message #" + room.Slug
+	input.Prompt = ""
 	input.Focus()
 	input.CharLimit = 500
-	input.Width = width - 6
+	input.Width = width - 8
 
 	return Model{
 		apiClient: apiClient,
@@ -76,9 +71,20 @@ func New(
 		username:  username,
 		viewport:  vp,
 		input:     input,
+		loading:   true,
 		width:     width,
 		height:    height,
 	}
+}
+
+// historyHeight is the room left for the message history once the frame and
+// the composer box are subtracted from the terminal height.
+func historyHeight(height int) int {
+	h := hud.BodyHeight(height) - chatview.ComposerHeight
+	if h < 1 {
+		return 1
+	}
+	return h
 }
 
 // Init initializes the chat model.
@@ -104,16 +110,23 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		case "enter":
 			return m.sendMessage()
 		}
+		// Only scroll keys reach the viewport; everything else is typing.
+		if isScrollKey(msg.String()) {
+			var cmd tea.Cmd
+			m.viewport, cmd = m.viewport.Update(msg)
+			return m, cmd
+		}
 
 	case historyLoadedMsg:
+		m.loading = false
 		// Messages come from the API in DESC order (newest first), reverse for display.
 		for i := len(msg.messages) - 1; i >= 0; i-- {
 			m2 := msg.messages[i]
-			m.messages = append(m.messages, chatMessage{
-				senderID:       m2.SenderID,
-				senderUsername: m2.SenderUsername,
-				content:        m2.Body,
-				timestamp:      m2.CreatedAt.Format("15:04"),
+			m.messages = append(m.messages, chatview.Message{
+				SenderID: m2.SenderID,
+				Sender:   m2.SenderUsername,
+				Body:     m2.Body,
+				At:       m2.CreatedAt,
 			})
 		}
 		m.updateViewport()
@@ -131,63 +144,49 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.viewport.Width = msg.Width
-		m.viewport.Height = msg.Height - 4
-		m.input.Width = msg.Width - 6
+		m.viewport.Height = historyHeight(msg.Height)
+		m.input.Width = msg.Width - 8
 		m.updateViewport()
 	}
 
-	var cmds []tea.Cmd
 	var cmd tea.Cmd
-
-	m.viewport, cmd = m.viewport.Update(msg)
-	cmds = append(cmds, cmd)
-
 	m.input, cmd = m.input.Update(msg)
-	cmds = append(cmds, cmd)
+	return m, cmd
+}
 
-	return m, tea.Batch(cmds...)
+// isScrollKey reports whether a key belongs to the message history rather than the
+// composer, which holds focus while chatting.
+func isScrollKey(key string) bool {
+	switch key {
+	case "pgup", "pgdown", "ctrl+u", "ctrl+d":
+		return true
+	}
+	return false
 }
 
 // View renders the chat model.
 func (m Model) View() string {
-	t := theme.Current
-
-	headerStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(t.Accent).
-		Padding(0, 1).
-		Border(lipgloss.NormalBorder(), false, false, true, false).
-		BorderForeground(t.Surface).
-		Width(m.width)
-
-	inputBoxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(t.Surface).
-		Padding(0, 1).
-		Width(m.width - 2)
-
-	statusStyle := lipgloss.NewStyle().
-		Foreground(t.Subtle).
-		Italic(true)
-
-	var b strings.Builder
-
-	header := fmt.Sprintf("#%s  %s", m.room.Slug, lipgloss.NewStyle().Foreground(t.Subtle).Render(m.room.Name))
-	b.WriteString(headerStyle.Render(header))
-	b.WriteString("\n")
-	b.WriteString(m.viewport.View())
-	b.WriteString("\n")
-	b.WriteString(inputBoxStyle.Render(m.input.View()))
-	b.WriteString("\n")
-
-	var statusParts []string
-	if m.err != "" {
-		statusParts = append(statusParts, lipgloss.NewStyle().Foreground(t.Error).Render(m.err))
+	frame := hud.Frame{
+		Width:    m.width,
+		Height:   m.height,
+		Title:    "# " + m.room.Slug,
+		Subtitle: m.room.Name,
+		Keys: []hud.Key{
+			{Key: "↵", Label: "send"},
+			{Key: "pgup/pgdn", Label: "scroll"},
+			{Key: "esc", Label: "leave"},
+		},
+		Err: m.err,
 	}
-	statusParts = append(statusParts, statusStyle.Render("esc: leave  enter: send"))
-	b.WriteString(strings.Join(statusParts, "  "))
 
-	return b.String()
+	body := m.viewport.View()
+	if m.loading {
+		body = components.Empty(m.width, m.viewport.Height, "loading history…", "")
+	} else if len(m.messages) == 0 {
+		body = components.Empty(m.width, m.viewport.Height, "No messages yet", "say something to start the conversation")
+	}
+
+	return frame.Render(body + "\n" + chatview.Composer(m.input, m.width))
 }
 
 func (m Model) sendMessage() (Model, tea.Cmd) {
@@ -214,11 +213,11 @@ func (m Model) handleWSMessage(msg ws.IncomingMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 
-		m.messages = append(m.messages, chatMessage{
-			senderID:       payload.SenderID,
-			senderUsername: payload.SenderUsername,
-			content:        payload.Content,
-			timestamp:      msg.Message.Timestamp.Format("15:04"),
+		m.messages = append(m.messages, chatview.Message{
+			SenderID: payload.SenderID,
+			Sender:   payload.SenderUsername,
+			Body:     payload.Content,
+			At:       msg.Message.Timestamp,
 		})
 		m.updateViewport()
 
@@ -233,25 +232,7 @@ func (m Model) handleWSMessage(msg ws.IncomingMsg) (Model, tea.Cmd) {
 }
 
 func (m *Model) updateViewport() {
-	t := theme.Current
-	ownStyle := lipgloss.NewStyle().Foreground(t.OwnMsg).Bold(true)
-	otherStyle := lipgloss.NewStyle().Foreground(t.OtherMsg).Bold(true)
-	timeStyle := lipgloss.NewStyle().Foreground(t.Subtle)
-	contentStyle := lipgloss.NewStyle().Foreground(t.Text)
-
-	var lines []string
-	for _, msg := range m.messages {
-		ts := timeStyle.Render(fmt.Sprintf("[%s]", msg.timestamp))
-		var name string
-		if msg.senderID == m.userID {
-			name = ownStyle.Render("you")
-		} else {
-			name = otherStyle.Render(msg.senderUsername)
-		}
-		lines = append(lines, fmt.Sprintf("%s %s: %s", ts, name, contentStyle.Render(msg.content)))
-	}
-
-	m.viewport.SetContent(strings.Join(lines, "\n"))
+	m.viewport.SetContent(chatview.Render(m.messages, m.userID, m.width))
 	m.viewport.GotoBottom()
 }
 

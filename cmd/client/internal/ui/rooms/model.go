@@ -7,11 +7,13 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sleklere/chattui/cmd/client/internal/api"
-	"github.com/sleklere/chattui/cmd/client/internal/ui/tabbar"
+	"github.com/sleklere/chattui/cmd/client/internal/ui/components"
+	"github.com/sleklere/chattui/cmd/client/internal/ui/hud"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/theme"
 	"github.com/sleklere/chattui/pkg/dto"
 )
@@ -67,7 +69,7 @@ type roomItemDelegate struct {
 	badges map[int64]int64
 }
 
-func (d roomItemDelegate) Height() int                             { return 2 }
+func (d roomItemDelegate) Height() int                             { return 1 }
 func (d roomItemDelegate) Spacing() int                            { return 0 }
 func (d roomItemDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
 func (d roomItemDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
@@ -77,39 +79,35 @@ func (d roomItemDelegate) Render(w io.Writer, m list.Model, index int, item list
 	}
 
 	t := theme.Current
-	name := i.room.Name
-	slug := i.room.Slug
-	badge := ""
-	if unread := d.badges[i.room.ID]; unread > 0 {
-		badge = fmt.Sprintf(" (%d)", unread)
+	selected := index == m.Index()
+	unread := d.badges[i.room.ID]
+
+	hashStyle := lipgloss.NewStyle().Foreground(theme.SpeakerColor(i.room.Slug))
+	nameStyle := lipgloss.NewStyle().Foreground(t.Text)
+	switch {
+	case selected:
+		nameStyle = nameStyle.Foreground(t.Accent).Bold(true)
+	case unread > 0:
+		nameStyle = nameStyle.Bold(true)
 	}
 
-	if index == m.Index() {
-		nameStyle := lipgloss.NewStyle().Foreground(t.Accent).Bold(true)
-		slugStyle := lipgloss.NewStyle().Foreground(t.Subtle)
-		badgeStyle := lipgloss.NewStyle().Foreground(t.Gold).Bold(true)
-		indicator := lipgloss.NewStyle().Foreground(t.Accent).Render(">")
-		str := fmt.Sprintf("%s %s%s %s", indicator, nameStyle.Render(name), badgeStyle.Render(badge), slugStyle.Render("#"+slug))
-		_, _ = fmt.Fprint(w, str)
-	} else {
-		nameStyle := lipgloss.NewStyle().Foreground(t.Text)
-		slugStyle := lipgloss.NewStyle().Foreground(t.Subtle)
-		badgeStyle := lipgloss.NewStyle().Foreground(t.Gold)
-		str := fmt.Sprintf("  %s%s %s", nameStyle.Render(name), badgeStyle.Render(badge), slugStyle.Render("#"+slug))
-		_, _ = fmt.Fprint(w, str)
-	}
+	left := hashStyle.Render("#") + " " + nameStyle.Render(i.room.Name)
+	_, _ = fmt.Fprint(w, components.Row(m.Width(), selected, left, components.Badge(unread)))
 }
 
 // Model is the Bubble Tea model for the room list screen.
 type Model struct {
 	apiClient    *api.Client
 	list         list.Model
+	spinner      spinner.Model
+	loading      bool
 	badges       map[int64]int64
 	inboxTotal   int64
 	creating     bool
 	createInput  textinput.Model
 	pickingTheme bool
 	themeIndex   int
+	showingHelp  bool
 	err          string
 	width        int
 	height       int
@@ -117,29 +115,25 @@ type Model struct {
 
 // New creates a new rooms Model with the given API client and dimensions.
 func New(apiClient *api.Client, badges map[int64]int64, inboxTotal int64, width, height int) Model {
-	t := theme.Current
-
 	if badges == nil {
 		badges = make(map[int64]int64)
 	}
-	l := list.New([]list.Item{}, roomItemDelegate{badges: badges}, width, height-6)
-	l.Title = "Rooms"
-	l.SetShowStatusBar(false)
-	l.SetShowHelp(false)
-	l.Styles.Title = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(t.Accent).
-		Padding(0, 1).
-		Border(lipgloss.RoundedBorder(), false, false, true, false).
-		BorderForeground(t.Surface)
+
+	l := list.New([]list.Item{}, roomItemDelegate{badges: badges}, width, hud.BodyHeight(height))
+	configureList(&l)
 
 	input := textinput.New()
+	input.Prompt = "❯ "
+	input.PromptStyle = lipgloss.NewStyle().Foreground(theme.Current.Accent)
 	input.Placeholder = "room name"
 	input.CharLimit = 50
+	input.Width = 28
 
 	return Model{
 		apiClient:   apiClient,
 		list:        l,
+		spinner:     newSpinner(),
+		loading:     true,
 		badges:      badges,
 		inboxTotal:  inboxTotal,
 		createInput: input,
@@ -148,9 +142,35 @@ func New(apiClient *api.Client, badges map[int64]int64, inboxTotal int64, width,
 	}
 }
 
+func configureList(l *list.Model) {
+	t := theme.Current
+	l.SetShowTitle(false)
+	l.SetShowStatusBar(false)
+	l.SetShowHelp(false)
+	l.SetShowPagination(true)
+	l.Styles.PaginationStyle = lipgloss.NewStyle().Foreground(t.Overlay).Padding(0, 0, 0, 2)
+	l.FilterInput.Prompt = "/ "
+	l.FilterInput.PromptStyle = lipgloss.NewStyle().Foreground(t.Accent)
+	l.Styles.FilterPrompt = lipgloss.NewStyle().Foreground(t.Accent)
+	l.Styles.FilterCursor = lipgloss.NewStyle().Foreground(t.Gold)
+}
+
+func newSpinner() spinner.Model {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(theme.Current.Accent)
+	return s
+}
+
+// HasOverlay reports whether a modal is open, so the app knows esc should
+// close it instead of quitting.
+func (m Model) HasOverlay() bool {
+	return m.creating || m.pickingTheme || m.showingHelp || m.list.FilterState() != list.Unfiltered
+}
+
 // Init initializes the rooms model.
 func (m Model) Init() tea.Cmd {
-	return m.fetchRooms()
+	return tea.Batch(m.fetchRooms(), m.spinner.Tick)
 }
 
 // Update handles messages for the rooms model.
@@ -162,6 +182,16 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		if m.pickingTheme {
 			return m.updateThemePicker(msg)
+		}
+		if m.showingHelp {
+			if msg.String() == "?" || msg.String() == "esc" || msg.String() == "q" {
+				m.showingHelp = false
+			}
+			return m, nil
+		}
+		// While filtering, every key belongs to the filter input.
+		if m.list.FilterState() == list.Filtering {
+			break
 		}
 
 		switch msg.String() {
@@ -179,21 +209,29 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				}
 			}
 			return m, nil
-		case "tab":
+		case "?":
+			m.showingHelp = true
+			return m, nil
+		case "tab", "d":
 			return m, func() tea.Msg { return ShowDMsMsg{} }
-		case "shift+tab":
-			return m, func() tea.Msg { return ShowInboxMsg{} }
-		case "d":
-			return m, func() tea.Msg { return ShowDMsMsg{} }
-		case "i":
+		case "shift+tab", "i":
 			return m, func() tea.Msg { return ShowInboxMsg{} }
 		case "r":
-			return m, m.fetchRooms()
+			m.loading = true
+			return m, tea.Batch(m.fetchRooms(), m.spinner.Tick)
 		case "enter":
 			if item, ok := m.list.SelectedItem().(roomItem); ok {
 				return m, m.joinAndSelect(item.room)
 			}
 		}
+
+	case spinner.TickMsg:
+		if !m.loading {
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 
 	case RoomBadgeUpdateMsg:
 		m.badges[msg.RoomID] = msg.Count
@@ -208,6 +246,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 
 	case roomsLoadedMsg:
+		m.loading = false
 		items := make([]list.Item, len(msg.rooms))
 		for i, r := range msg.rooms {
 			items[i] = roomItem{room: r}
@@ -217,7 +256,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 	case roomCreatedMsg:
 		m.creating = false
-		return m, m.fetchRooms()
+		m.loading = true
+		return m, tea.Batch(m.fetchRooms(), m.spinner.Tick)
 
 	case roomJoinedMsg:
 		return m, func() tea.Msg {
@@ -225,6 +265,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 
 	case RoomErrorMsg:
+		m.loading = false
 		m.err = msg.Err.Error()
 		m.creating = false
 		return m, nil
@@ -232,7 +273,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.list.SetSize(msg.Width, msg.Height-6)
+		m.list.SetSize(msg.Width, hud.BodyHeight(msg.Height))
 	}
 
 	var cmd tea.Cmd
@@ -242,41 +283,77 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 // View renders the rooms model.
 func (m Model) View() string {
-	t := theme.Current
-	helpStyle := lipgloss.NewStyle().Foreground(t.Subtle).Italic(true)
-	errorStyle := lipgloss.NewStyle().Foreground(t.Error)
-	promptStyle := lipgloss.NewStyle().Foreground(t.Gold).Bold(true)
+	frame := hud.Frame{
+		Width:     m.width,
+		Height:    m.height,
+		ActiveTab: hud.TabRooms,
+		Badges:    map[string]int64{hud.TabDMs: m.dmsTotal(), hud.TabInbox: m.inboxTotal},
+		Keys:      m.keys(),
+		Err:       m.err,
+	}
+	return frame.Render(m.body())
+}
 
-	var b strings.Builder
+func (m Model) keys() []hud.Key {
+	switch {
+	case m.creating:
+		return []hud.Key{{Key: "↵", Label: "create"}, {Key: "esc", Label: "cancel"}}
+	case m.pickingTheme:
+		return []hud.Key{{Key: "j/k", Label: "preview"}, {Key: "↵", Label: "apply"}, {Key: "esc", Label: "cancel"}}
+	default:
+		return []hud.Key{
+			{Key: "↵", Label: "join"},
+			{Key: "n", Label: "new"},
+			{Key: "/", Label: "filter"},
+			{Key: "tab", Label: "switch"},
+			{Key: "?", Label: "help"},
+		}
+	}
+}
 
-	b.WriteString(tabbar.Render("Rooms", 0, m.dmsTotal(), m.inboxTotal))
-	b.WriteString("\n")
-	b.WriteString(m.list.View())
-	b.WriteString("\n")
+func (m Model) body() string {
+	height := hud.BodyHeight(m.height)
 
-	if m.creating {
-		b.WriteString(promptStyle.Render("New room: "))
-		b.WriteString(m.createInput.View())
-		b.WriteString("\n")
+	var body string
+	switch {
+	case m.loading:
+		body = components.Empty(m.width, height, m.spinner.View()+" loading rooms", "")
+	case len(m.list.Items()) == 0:
+		body = components.Empty(m.width, height, "No rooms yet", "press n to create the first one")
+	default:
+		body = m.list.View()
 	}
 
-	if m.pickingTheme {
-		b.WriteString(m.themePickerView())
-		b.WriteString("\n")
+	switch {
+	case m.showingHelp:
+		return hud.Overlay(body, hud.Help(helpSections()), m.width, height)
+	case m.creating:
+		return hud.Overlay(body, hud.Modal("New room", m.createInput.View()), m.width, height)
+	case m.pickingTheme:
+		return hud.Overlay(body, hud.Modal("Theme", m.themeList()), m.width, height)
 	}
+	return body
+}
 
-	if m.err != "" {
-		b.WriteString(errorStyle.Render(m.err))
-		b.WriteString("\n")
+func helpSections() []hud.HelpSection {
+	return []hud.HelpSection{
+		{Title: "Navigate", Keys: []hud.Key{
+			{Key: "j / ↓", Label: "move down"},
+			{Key: "k / ↑", Label: "move up"},
+			{Key: "enter", Label: "join room"},
+			{Key: "/", Label: "filter rooms"},
+		}},
+		{Title: "Screens", Keys: []hud.Key{
+			{Key: "tab", Label: "direct messages"},
+			{Key: "shift+tab", Label: "inbox"},
+			{Key: "esc", Label: "quit"},
+		}},
+		{Title: "Actions", Keys: []hud.Key{
+			{Key: "n", Label: "new room"},
+			{Key: "r", Label: "refresh"},
+			{Key: "t", Label: "change theme"},
+		}},
 	}
-
-	if m.pickingTheme {
-		b.WriteString(helpStyle.Render("j/k: navigate  enter: apply  esc: cancel"))
-	} else {
-		b.WriteString(helpStyle.Render("enter: join  n: new room  tab: switch tabs  t: theme  r: refresh  esc: quit"))
-	}
-
-	return b.String()
 }
 
 func (m Model) updateThemePicker(msg tea.KeyMsg) (Model, tea.Cmd) {
@@ -285,12 +362,12 @@ func (m Model) updateThemePicker(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "j", "down":
 		m.themeIndex = (m.themeIndex + 1) % len(names)
 		theme.SetTheme(names[m.themeIndex])
-		m.refreshListStyles()
+		m.refreshStyles()
 		return m, nil
 	case "k", "up":
 		m.themeIndex = (m.themeIndex - 1 + len(names)) % len(names)
 		theme.SetTheme(names[m.themeIndex])
-		m.refreshListStyles()
+		m.refreshStyles()
 		return m, nil
 	case "enter":
 		m.pickingTheme = false
@@ -303,42 +380,25 @@ func (m Model) updateThemePicker(msg tea.KeyMsg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) refreshListStyles() {
-	t := theme.Current
-	m.list.Styles.Title = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(t.Accent).
-		Padding(0, 1).
-		Border(lipgloss.RoundedBorder(), false, false, true, false).
-		BorderForeground(t.Surface)
+func (m *Model) refreshStyles() {
+	configureList(&m.list)
+	m.spinner.Style = lipgloss.NewStyle().Foreground(theme.Current.Accent)
 }
 
-func (m Model) themePickerView() string {
+func (m Model) themeList() string {
 	t := theme.Current
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(t.Accent).
-		Padding(0, 2)
-
-	titleStyle := lipgloss.NewStyle().Foreground(t.Gold).Bold(true)
-	selectedStyle := lipgloss.NewStyle().Foreground(t.Accent).Bold(true)
-	normalStyle := lipgloss.NewStyle().Foreground(t.Text)
-
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Theme"))
-	b.WriteString("\n")
 	for i, name := range theme.Names {
-		if i == m.themeIndex {
-			b.WriteString(selectedStyle.Render(fmt.Sprintf("> %s", name)))
-		} else {
-			b.WriteString(normalStyle.Render(fmt.Sprintf("  %s", name)))
-		}
-		if i < len(theme.Names)-1 {
+		if i > 0 {
 			b.WriteString("\n")
 		}
+		if i == m.themeIndex {
+			b.WriteString(lipgloss.NewStyle().Foreground(t.Accent).Bold(true).Render("▸ " + name))
+			continue
+		}
+		b.WriteString(lipgloss.NewStyle().Foreground(t.Text).Render("  " + name))
 	}
-
-	return boxStyle.Render(b.String())
+	return b.String()
 }
 
 func (m Model) updateCreating(msg tea.KeyMsg) (Model, tea.Cmd) {

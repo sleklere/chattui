@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -12,6 +13,13 @@ import (
 	"github.com/sleklere/chattui/cmd/client/internal/ui/theme"
 	"github.com/sleklere/chattui/pkg/dto"
 )
+
+// wordmark is the chattui logo shown above the login card.
+var wordmark = []string{
+	"┌─┐┬ ┬┌─┐┌┬┐┌┬┐┬ ┬┬",
+	"│  ├─┤├─┤ │  │ │ ││",
+	"└─┘┴ ┴┴ ┴ ┴  ┴ └─┘┴",
+}
 
 type mode int
 
@@ -37,6 +45,7 @@ type Model struct {
 	apiClient     *api.Client
 	usernameInput textinput.Model
 	passwordInput textinput.Model
+	spinner       spinner.Model
 	mode          mode
 	focusIndex    int
 	err           string
@@ -48,26 +57,33 @@ type Model struct {
 // New creates a new auth Model with the given API client.
 func New(apiClient *api.Client) Model {
 	username := textinput.New()
+	username.Prompt = ""
 	username.Placeholder = "username"
 	username.Focus()
 	username.CharLimit = 32
 
 	password := textinput.New()
+	password.Prompt = ""
 	password.Placeholder = "password"
 	password.EchoMode = textinput.EchoPassword
 	password.CharLimit = 64
+
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(theme.Current.Accent)
 
 	return Model{
 		apiClient:     apiClient,
 		usernameInput: username,
 		passwordInput: password,
+		spinner:       s,
 		mode:          modeLogin,
 	}
 }
 
 // Init initializes the auth model.
 func (m Model) Init() tea.Cmd {
-	return textinput.Blink
+	return tea.Batch(textinput.Blink, m.spinner.Tick)
 }
 
 // Update handles messages for the auth model.
@@ -85,7 +101,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			if m.loading {
 				return m, nil
 			}
-			return m, m.submit()
+			cmd := m.submit()
+			m.loading = true
+			return m, tea.Batch(cmd, m.spinner.Tick)
 		}
 
 	case SuccessMsg:
@@ -94,6 +112,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case ErrorMsg:
 		m.loading = false
 		m.err = msg.Err.Error()
+
+	case spinner.TickMsg:
+		if !m.loading {
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -107,71 +133,75 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 func (m Model) View() string {
 	t := theme.Current
 
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(t.Accent)
+	logo := lipgloss.NewStyle().Foreground(t.Accent).Bold(true).Render(strings.Join(wordmark, "\n"))
+	tagline := lipgloss.NewStyle().Foreground(t.Subtle).Render("chat that lives in your terminal")
 
-	formStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(t.Surface).
-		Padding(1, 3).
-		Width(50)
-
-	labelStyle := lipgloss.NewStyle().
-		Foreground(t.Subtle).
-		Bold(true)
-
-	errorStyle := lipgloss.NewStyle().
-		Foreground(t.Error)
-
-	helpStyle := lipgloss.NewStyle().
-		Foreground(t.Subtle).
-		Italic(true)
-
-	brandStyle := lipgloss.NewStyle().
-		Foreground(t.Gold).
-		Bold(true)
-
-	var title string
-	if m.mode == modeLogin {
-		title = "Login"
-	} else {
-		title = "Register"
+	title := "Sign in"
+	if m.mode == modeRegister {
+		title = "Create account"
 	}
 
 	var b strings.Builder
+	b.WriteString(lipgloss.NewStyle().Foreground(t.Gold).Bold(true).Render(title))
+	b.WriteString("\n\n")
+	b.WriteString(m.field("Username", m.usernameInput, m.focusIndex == 0))
+	b.WriteString("\n\n")
+	b.WriteString(m.field("Password", m.passwordInput, m.focusIndex == 1))
+	b.WriteString("\n\n")
+	b.WriteString(m.statusLine())
 
-	b.WriteString(brandStyle.Render("chattui"))
-	b.WriteString("\n\n")
-	b.WriteString(titleStyle.Render(title))
-	b.WriteString("\n\n")
-	b.WriteString(labelStyle.Render("Username"))
-	b.WriteString("\n")
-	b.WriteString(m.usernameInput.View())
-	b.WriteString("\n\n")
-	b.WriteString(labelStyle.Render("Password"))
-	b.WriteString("\n")
-	b.WriteString(m.passwordInput.View())
-	b.WriteString("\n\n")
+	card := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(t.Overlay).
+		Padding(1, 3).
+		Width(46).
+		Render(b.String())
 
-	if m.loading {
-		b.WriteString(lipgloss.NewStyle().Foreground(t.Gold).Render("Authenticating..."))
-	} else if m.err != "" {
-		b.WriteString(errorStyle.Render(m.err))
+	toggle := "no account yet?  ctrl+t to register"
+	if m.mode == modeRegister {
+		toggle = "already registered?  ctrl+t to sign in"
+	}
+	help := lipgloss.NewStyle().Foreground(t.Subtle).Render(toggle) + "\n" +
+		lipgloss.NewStyle().Foreground(t.Overlay).Render("tab switch field   enter submit   ctrl+c quit")
+
+	screen := lipgloss.JoinVertical(lipgloss.Center, logo, "", tagline, "", card, "", help)
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, screen)
+}
+
+// field renders a labelled input with an underline that lights up when focused.
+func (m Model) field(label string, input textinput.Model, focused bool) string {
+	t := theme.Current
+
+	labelColor := t.Subtle
+	borderColor := t.Overlay
+	marker := "  "
+	if focused {
+		labelColor = t.Accent
+		borderColor = t.Accent
+		marker = lipgloss.NewStyle().Foreground(t.Accent).Render("▸ ")
 	}
 
-	b.WriteString("\n\n")
+	head := marker + lipgloss.NewStyle().Foreground(labelColor).Bold(true).Render(label)
+	box := lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder(), false, false, true, false).
+		BorderForeground(borderColor).
+		Width(40).
+		Render("  " + input.View())
 
-	var modeToggle string
-	if m.mode == modeLogin {
-		modeToggle = "Don't have an account? ctrl+t to register"
-	} else {
-		modeToggle = "Already have an account? ctrl+t to login"
+	return head + "\n" + box
+}
+
+// statusLine shows the spinner while authenticating, or the last error.
+func (m Model) statusLine() string {
+	t := theme.Current
+	switch {
+	case m.loading:
+		return m.spinner.View() + lipgloss.NewStyle().Foreground(t.Gold).Render(" authenticating")
+	case m.err != "":
+		return lipgloss.NewStyle().Foreground(t.Error).Render("✗ " + m.err)
+	default:
+		return " "
 	}
-	b.WriteString(helpStyle.Render(fmt.Sprintf("%s\ntab: switch fields  enter: submit", modeToggle)))
-
-	form := formStyle.Render(b.String())
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, form)
 }
 
 func (m *Model) toggleMode() {
@@ -206,7 +236,6 @@ func (m Model) submit() tea.Cmd {
 		}
 	}
 
-	m.loading = true
 	req := api.AuthRequest{Username: username, Password: password}
 
 	return func() tea.Msg {

@@ -7,11 +7,13 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sleklere/chattui/cmd/client/internal/api"
-	"github.com/sleklere/chattui/cmd/client/internal/ui/tabbar"
+	"github.com/sleklere/chattui/cmd/client/internal/ui/components"
+	"github.com/sleklere/chattui/cmd/client/internal/ui/hud"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/theme"
 	"github.com/sleklere/chattui/pkg/dto"
 )
@@ -68,7 +70,7 @@ type convItemDelegate struct {
 	badges map[int64]int64
 }
 
-func (d convItemDelegate) Height() int                             { return 2 }
+func (d convItemDelegate) Height() int                             { return 1 }
 func (d convItemDelegate) Spacing() int                            { return 0 }
 func (d convItemDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
 func (d convItemDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
@@ -78,31 +80,32 @@ func (d convItemDelegate) Render(w io.Writer, m list.Model, index int, item list
 	}
 
 	t := theme.Current
-	badge := ""
-	if unread := d.badges[i.conv.ID]; unread > 0 {
-		badge = fmt.Sprintf(" (%d)", unread)
+	selected := index == m.Index()
+	unread := d.badges[i.conv.ID]
+
+	nameStyle := lipgloss.NewStyle().Foreground(t.Text)
+	switch {
+	case selected:
+		nameStyle = nameStyle.Foreground(t.Accent).Bold(true)
+	case unread > 0:
+		nameStyle = nameStyle.Bold(true)
 	}
 
-	if index == m.Index() {
-		nameStyle := lipgloss.NewStyle().Foreground(t.Accent).Bold(true)
-		badgeStyle := lipgloss.NewStyle().Foreground(t.Gold).Bold(true)
-		indicator := lipgloss.NewStyle().Foreground(t.Accent).Render(">")
-		_, _ = fmt.Fprintf(w, "%s %s%s", indicator, nameStyle.Render(i.conv.PeerUsername), badgeStyle.Render(badge))
-	} else {
-		nameStyle := lipgloss.NewStyle().Foreground(t.Text)
-		badgeStyle := lipgloss.NewStyle().Foreground(t.Gold)
-		_, _ = fmt.Fprintf(w, "  %s%s", nameStyle.Render(i.conv.PeerUsername), badgeStyle.Render(badge))
-	}
+	left := components.Dot(i.conv.PeerUsername) + " " + nameStyle.Render(i.conv.PeerUsername)
+	_, _ = fmt.Fprint(w, components.Row(m.Width(), selected, left, components.Badge(unread)))
 }
 
 // Model is the Bubble Tea model for the DM conversation list screen.
 type Model struct {
 	apiClient   *api.Client
 	list        list.Model
+	spinner     spinner.Model
+	loading     bool
 	badges      map[int64]int64
 	inboxTotal  int64
 	creating    bool
 	createInput textinput.Model
+	showingHelp bool
 	err         string
 	width       int
 	height      int
@@ -110,29 +113,36 @@ type Model struct {
 
 // New creates a new DM list Model.
 func New(apiClient *api.Client, badges map[int64]int64, inboxTotal int64, width, height int) Model {
-	t := theme.Current
-
 	if badges == nil {
 		badges = make(map[int64]int64)
 	}
-	l := list.New([]list.Item{}, convItemDelegate{badges: badges}, width, height-6)
-	l.Title = "Direct Messages"
+
+	l := list.New([]list.Item{}, convItemDelegate{badges: badges}, width, hud.BodyHeight(height))
+	t := theme.Current
+	l.SetShowTitle(false)
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(false)
-	l.Styles.Title = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(t.Accent).
-		Padding(0, 1).
-		Border(lipgloss.RoundedBorder(), false, false, true, false).
-		BorderForeground(t.Surface)
+	l.Styles.PaginationStyle = lipgloss.NewStyle().Foreground(t.Overlay).Padding(0, 0, 0, 2)
+	l.FilterInput.Prompt = "/ "
+	l.Styles.FilterPrompt = lipgloss.NewStyle().Foreground(t.Accent)
+	l.Styles.FilterCursor = lipgloss.NewStyle().Foreground(t.Gold)
 
 	input := textinput.New()
+	input.Prompt = "❯ "
+	input.PromptStyle = lipgloss.NewStyle().Foreground(theme.Current.Accent)
 	input.Placeholder = "username"
 	input.CharLimit = 50
+	input.Width = 28
+
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(t.Accent)
 
 	return Model{
 		apiClient:   apiClient,
 		list:        l,
+		spinner:     s,
+		loading:     true,
 		badges:      badges,
 		inboxTotal:  inboxTotal,
 		createInput: input,
@@ -143,7 +153,7 @@ func New(apiClient *api.Client, badges map[int64]int64, inboxTotal int64, width,
 
 // Init initializes the DM list model.
 func (m Model) Init() tea.Cmd {
-	return m.fetchConvs()
+	return tea.Batch(m.fetchConvs(), m.spinner.Tick)
 }
 
 // Update handles messages for the DM list model.
@@ -153,16 +163,27 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		if m.creating {
 			return m.updateCreating(msg)
 		}
+		if m.showingHelp {
+			if msg.String() == "?" || msg.String() == "esc" {
+				m.showingHelp = false
+			}
+			return m, nil
+		}
+		if m.list.FilterState() == list.Filtering {
+			break
+		}
 
 		switch msg.String() {
-		case "esc":
+		case "?":
+			m.showingHelp = true
+			return m, nil
+		case "esc", "shift+tab":
 			return m, func() tea.Msg { return LeaveDMListMsg{} }
-		case "tab":
+		case "tab", "i":
 			return m, func() tea.Msg { return ShowInboxMsg{} }
-		case "shift+tab":
-			return m, func() tea.Msg { return LeaveDMListMsg{} }
-		case "i":
-			return m, func() tea.Msg { return ShowInboxMsg{} }
+		case "r":
+			m.loading = true
+			return m, tea.Batch(m.fetchConvs(), m.spinner.Tick)
 		case "n":
 			m.creating = true
 			m.createInput.SetValue("")
@@ -173,6 +194,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				return m, func() tea.Msg { return ConvSelectedMsg{Conv: item.conv} }
 			}
 		}
+
+	case spinner.TickMsg:
+		if !m.loading {
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 
 	case ConvBadgeUpdateMsg:
 		m.badges[msg.ConvID] = msg.Count
@@ -187,6 +216,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 
 	case convsLoadedMsg:
+		m.loading = false
 		items := make([]list.Item, len(msg.convs))
 		for i, c := range msg.convs {
 			items[i] = convItem{conv: c}
@@ -200,6 +230,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 
 	case dmErrorMsg:
+		m.loading = false
 		m.err = msg.err.Error()
 		m.creating = false
 		return m, nil
@@ -207,7 +238,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.list.SetSize(msg.Width, msg.Height-6)
+		m.list.SetSize(msg.Width, hud.BodyHeight(msg.Height))
 	}
 
 	var cmd tea.Cmd
@@ -217,32 +248,68 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 // View renders the DM list model.
 func (m Model) View() string {
-	t := theme.Current
-	helpStyle := lipgloss.NewStyle().Foreground(t.Subtle).Italic(true)
-	errorStyle := lipgloss.NewStyle().Foreground(t.Error)
-	promptStyle := lipgloss.NewStyle().Foreground(t.Gold).Bold(true)
-
-	var b strings.Builder
-
-	b.WriteString(tabbar.Render("DMs", m.roomsTotal(), 0, m.inboxTotal))
-	b.WriteString("\n")
-	b.WriteString(m.list.View())
-	b.WriteString("\n")
-
+	keys := []hud.Key{
+		{Key: "↵", Label: "open"},
+		{Key: "n", Label: "new DM"},
+		{Key: "/", Label: "filter"},
+		{Key: "tab", Label: "switch"},
+		{Key: "?", Label: "help"},
+	}
 	if m.creating {
-		b.WriteString(promptStyle.Render("New DM with: "))
-		b.WriteString(m.createInput.View())
-		b.WriteString("\n")
+		keys = []hud.Key{{Key: "↵", Label: "start chat"}, {Key: "esc", Label: "cancel"}}
 	}
 
-	if m.err != "" {
-		b.WriteString(errorStyle.Render(m.err))
-		b.WriteString("\n")
+	frame := hud.Frame{
+		Width:     m.width,
+		Height:    m.height,
+		ActiveTab: hud.TabDMs,
+		Badges:    map[string]int64{hud.TabRooms: m.roomsTotal(), hud.TabInbox: m.inboxTotal},
+		Keys:      keys,
+		Err:       m.err,
+	}
+	return frame.Render(m.body())
+}
+
+func (m Model) body() string {
+	height := hud.BodyHeight(m.height)
+
+	var body string
+	switch {
+	case m.loading:
+		body = components.Empty(m.width, height, m.spinner.View()+" loading conversations", "")
+	case len(m.list.Items()) == 0:
+		body = components.Empty(m.width, height, "No conversations yet", "press n and type a username to start one")
+	default:
+		body = m.list.View()
 	}
 
-	b.WriteString(helpStyle.Render("enter: open  n: new DM  tab: switch tabs  esc: back to rooms"))
+	switch {
+	case m.showingHelp:
+		return hud.Overlay(body, hud.Help(helpSections()), m.width, height)
+	case m.creating:
+		return hud.Overlay(body, hud.Modal("New DM", m.createInput.View()), m.width, height)
+	}
+	return body
+}
 
-	return b.String()
+func helpSections() []hud.HelpSection {
+	return []hud.HelpSection{
+		{Title: "Navigate", Keys: []hud.Key{
+			{Key: "j / ↓", Label: "move down"},
+			{Key: "k / ↑", Label: "move up"},
+			{Key: "enter", Label: "open chat"},
+			{Key: "/", Label: "filter"},
+		}},
+		{Title: "Screens", Keys: []hud.Key{
+			{Key: "tab", Label: "inbox"},
+			{Key: "shift+tab", Label: "rooms"},
+			{Key: "esc", Label: "back to rooms"},
+		}},
+		{Title: "Actions", Keys: []hud.Key{
+			{Key: "n", Label: "new DM"},
+			{Key: "r", Label: "refresh"},
+		}},
+	}
 }
 
 func (m Model) updateCreating(msg tea.KeyMsg) (Model, tea.Cmd) {

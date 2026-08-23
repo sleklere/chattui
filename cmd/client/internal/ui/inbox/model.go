@@ -10,10 +10,12 @@ import (
 	"encoding/json"
 
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sleklere/chattui/cmd/client/internal/api"
-	"github.com/sleklere/chattui/cmd/client/internal/ui/tabbar"
+	"github.com/sleklere/chattui/cmd/client/internal/ui/components"
+	"github.com/sleklere/chattui/cmd/client/internal/ui/hud"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/theme"
 	"github.com/sleklere/chattui/cmd/client/internal/ws"
 	"github.com/sleklere/chattui/pkg/dto"
@@ -83,61 +85,78 @@ func (d entryItemDelegate) Render(w io.Writer, m list.Model, index int, item lis
 	}
 
 	t := theme.Current
-	line1 := formatEntry(i.entry)
-	line2 := "  " + timeAgo(i.entry.CreatedAt)
+	selected := index == m.Index()
+	e := i.entry
 
-	if index == m.Index() {
-		mainStyle := lipgloss.NewStyle().Foreground(t.Accent).Bold(true)
-		timeStyle := lipgloss.NewStyle().Foreground(t.Gold)
-		indicator := lipgloss.NewStyle().Foreground(t.Accent).Render(">")
-		_, _ = fmt.Fprintf(w, "%s %s\n%s", indicator, mainStyle.Render(line1), timeStyle.Render(line2))
-	} else {
-		mainStyle := lipgloss.NewStyle().Foreground(t.Text)
-		timeStyle := lipgloss.NewStyle().Foreground(t.Subtle)
-		_, _ = fmt.Fprintf(w, "  %s\n%s", mainStyle.Render(line1), timeStyle.Render(line2))
+	titleStyle := lipgloss.NewStyle().Foreground(t.Text)
+	switch {
+	case selected:
+		titleStyle = titleStyle.Foreground(t.Accent).Bold(true)
+	case e.UnreadCount > 0:
+		titleStyle = titleStyle.Bold(true)
 	}
+
+	left := entryIcon(e) + " " + titleStyle.Render(entryTitle(e))
+	right := lipgloss.NewStyle().Foreground(t.Subtle).Render(timeAgo(e.CreatedAt))
+	if badge := components.Badge(e.UnreadCount); badge != "" {
+		right = badge + " " + right
+	}
+
+	preview := lipgloss.NewStyle().Foreground(t.Subtle).Render("  " + entryPreview(e))
+
+	_, _ = fmt.Fprint(w, components.Row(m.Width(), selected, left, right))
+	_, _ = fmt.Fprint(w, "\n")
+	_, _ = fmt.Fprint(w, components.SubRow(m.Width(), selected, preview))
 }
 
-func formatEntry(e dto.InboxFeed) string {
+// entryIcon returns the source marker: rooms get a hash, DMs a colored dot.
+func entryIcon(e dto.InboxFeed) string {
+	if e.Room != nil {
+		return lipgloss.NewStyle().Foreground(theme.SpeakerColor(e.Room.Name)).Render("#")
+	}
+	if e.SourceUser != nil {
+		return components.Dot(e.SourceUser.Username)
+	}
+	return " "
+}
+
+// entryTitle returns the conversation or room the entry belongs to.
+func entryTitle(e dto.InboxFeed) string {
+	if e.Room != nil {
+		return e.Room.Name
+	}
+	if e.SourceUser != nil {
+		return e.SourceUser.Username
+	}
+	return "conversation"
+}
+
+// entryPreview returns the second line: the event description or the last message.
+func entryPreview(e dto.InboxFeed) string {
+	username := ""
+	if e.SourceUser != nil {
+		username = e.SourceUser.Username
+	}
+
 	if e.EntryType == "event" {
-		username := ""
-		if e.SourceUser != nil {
-			username = e.SourceUser.Username
-		}
-		roomName := ""
-		if e.Room != nil {
-			roomName = "#" + e.Room.Name
-		}
 		switch e.Kind {
 		case "room_join":
-			return fmt.Sprintf("%s joined %s", username, roomName)
+			return username + " joined the room"
 		case "room_leave":
-			return fmt.Sprintf("%s left %s", username, roomName)
+			return username + " left the room"
 		default:
-			return fmt.Sprintf("%s: %s", e.Kind, username)
+			return e.Kind
 		}
 	}
 
-	// conversation entry
-	unread := ""
-	if e.UnreadCount > 0 {
-		unread = fmt.Sprintf(" (%d)", e.UnreadCount)
+	if e.LastMessage == nil {
+		return "no messages yet"
 	}
-	if e.Room != nil {
-		body := ""
-		if e.LastMessage != nil {
-			body = ": " + e.LastMessage.Body
-		}
-		return fmt.Sprintf("#%s%s%s", e.Room.Name, body, unread)
+	body := strings.ReplaceAll(e.LastMessage.Body, "\n", " ")
+	if e.Room != nil && username != "" {
+		return username + ": " + body
 	}
-	if e.SourceUser != nil {
-		body := ""
-		if e.LastMessage != nil {
-			body = ": " + e.LastMessage.Body
-		}
-		return fmt.Sprintf("DM %s%s%s", e.SourceUser.Username, body, unread)
-	}
-	return "conversation"
+	return body
 }
 
 func timeAgo(t time.Time) string {
@@ -156,33 +175,40 @@ func timeAgo(t time.Time) string {
 
 // Model is the Bubble Tea model for the inbox screen.
 type Model struct {
-	apiClient  *api.Client
-	list       list.Model
-	roomsTotal int64
-	dmsTotal   int64
-	err        string
-	width      int
-	height     int
+	apiClient   *api.Client
+	list        list.Model
+	spinner     spinner.Model
+	loading     bool
+	roomsTotal  int64
+	dmsTotal    int64
+	showingHelp bool
+	err         string
+	width       int
+	height      int
 }
 
 // New creates a new inbox Model.
 func New(apiClient *api.Client, _ int64, width, height int) Model {
 	t := theme.Current
 
-	l := list.New([]list.Item{}, entryItemDelegate{}, width, height-6)
-	l.Title = "Inbox"
+	l := list.New([]list.Item{}, entryItemDelegate{}, width, hud.BodyHeight(height))
+	l.SetShowTitle(false)
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(false)
-	l.Styles.Title = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(t.Accent).
-		Padding(0, 1).
-		Border(lipgloss.RoundedBorder(), false, false, true, false).
-		BorderForeground(t.Surface)
+	l.Styles.PaginationStyle = lipgloss.NewStyle().Foreground(t.Overlay).Padding(0, 0, 0, 2)
+	l.FilterInput.Prompt = "/ "
+	l.Styles.FilterPrompt = lipgloss.NewStyle().Foreground(t.Accent)
+	l.Styles.FilterCursor = lipgloss.NewStyle().Foreground(t.Gold)
+
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(t.Accent)
 
 	return Model{
 		apiClient: apiClient,
 		list:      l,
+		spinner:   s,
+		loading:   true,
 		width:     width,
 		height:    height,
 	}
@@ -190,22 +216,34 @@ func New(apiClient *api.Client, _ int64, width, height int) Model {
 
 // Init initializes the inbox model.
 func (m Model) Init() tea.Cmd {
-	return m.fetchEntries()
+	return tea.Batch(m.fetchEntries(), m.spinner.Tick)
 }
 
 // Update handles messages for the inbox model.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		if m.showingHelp {
+			if msg.String() == "?" || msg.String() == "esc" {
+				m.showingHelp = false
+			}
+			return m, nil
+		}
+		if m.list.FilterState() == list.Filtering {
+			break
+		}
+
 		switch msg.String() {
-		case "esc":
-			return m, func() tea.Msg { return LeaveInboxMsg{} }
-		case "tab":
+		case "?":
+			m.showingHelp = true
+			return m, nil
+		case "esc", "tab":
 			return m, func() tea.Msg { return LeaveInboxMsg{} }
 		case "shift+tab":
 			return m, func() tea.Msg { return ShowDMsMsg{} }
 		case "r":
-			return m, m.fetchEntries()
+			m.loading = true
+			return m, tea.Batch(m.fetchEntries(), m.spinner.Tick)
 		case "m":
 			if item, ok := m.list.SelectedItem().(entryItem); ok {
 				if item.entry.UnreadCount > 0 {
@@ -221,6 +259,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				return m, tea.Batch(cmds...)
 			}
 		}
+
+	case spinner.TickMsg:
+		if !m.loading {
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 
 	case ws.IncomingMsg:
 		if msg.Message.Type == ws.TypeInboxUpdated {
@@ -245,6 +291,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, func() tea.Msg { return badges }
 
 	case entriesLoadedMsg:
+		m.loading = false
 		items := make([]list.Item, len(msg.entries))
 		for i, e := range msg.entries {
 			items[i] = entryItem{entry: e}
@@ -256,13 +303,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, func() tea.Msg { return badges }
 
 	case ErrorMsg:
+		m.loading = false
 		m.err = msg.Err.Error()
 		return m, nil
 
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.list.SetSize(msg.Width, msg.Height-6)
+		m.list.SetSize(msg.Width, hud.BodyHeight(msg.Height))
 	}
 
 	var cmd tea.Cmd
@@ -272,25 +320,56 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 // View renders the inbox model.
 func (m Model) View() string {
-	t := theme.Current
-	helpStyle := lipgloss.NewStyle().Foreground(t.Subtle).Italic(true)
-	errorStyle := lipgloss.NewStyle().Foreground(t.Error)
-
-	var b strings.Builder
-
-	b.WriteString(tabbar.Render("Inbox", m.roomsTotal, m.dmsTotal, 0))
-	b.WriteString("\n")
-	b.WriteString(m.list.View())
-	b.WriteString("\n")
-
-	if m.err != "" {
-		b.WriteString(errorStyle.Render(m.err))
-		b.WriteString("\n")
+	frame := hud.Frame{
+		Width:     m.width,
+		Height:    m.height,
+		ActiveTab: hud.TabInbox,
+		Badges:    map[string]int64{hud.TabRooms: m.roomsTotal, hud.TabDMs: m.dmsTotal},
+		Keys: []hud.Key{
+			{Key: "↵", Label: "open"},
+			{Key: "m", Label: "mark read"},
+			{Key: "tab", Label: "switch"},
+			{Key: "?", Label: "help"},
+		},
+		Err: m.err,
 	}
 
-	b.WriteString(helpStyle.Render("tab/shift+tab: switch tabs  r: refresh  m: mark as read  esc: back to rooms"))
+	height := hud.BodyHeight(m.height)
 
-	return b.String()
+	var body string
+	switch {
+	case m.loading:
+		body = components.Empty(m.width, height, m.spinner.View()+" loading inbox", "")
+	case len(m.list.Items()) == 0:
+		body = components.Empty(m.width, height, "Inbox zero", "new messages and room activity will show up here")
+	default:
+		body = m.list.View()
+	}
+
+	if m.showingHelp {
+		body = hud.Overlay(body, hud.Help(helpSections()), m.width, height)
+	}
+	return frame.Render(body)
+}
+
+func helpSections() []hud.HelpSection {
+	return []hud.HelpSection{
+		{Title: "Navigate", Keys: []hud.Key{
+			{Key: "j / ↓", Label: "move down"},
+			{Key: "k / ↑", Label: "move up"},
+			{Key: "enter", Label: "open and mark read"},
+			{Key: "/", Label: "filter"},
+		}},
+		{Title: "Screens", Keys: []hud.Key{
+			{Key: "tab", Label: "rooms"},
+			{Key: "shift+tab", Label: "direct messages"},
+			{Key: "esc", Label: "back to rooms"},
+		}},
+		{Title: "Actions", Keys: []hud.Key{
+			{Key: "m", Label: "mark as read"},
+			{Key: "r", Label: "refresh"},
+		}},
+	}
 }
 
 func markAsReadCmd(client *api.Client, e dto.InboxFeed) tea.Cmd {
