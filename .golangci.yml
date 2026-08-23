@@ -1,12 +1,19 @@
+version: "2"
 run:
   timeout: 3m
 linters:
   enable:
-    - errcheck
-    - gosimple
-    - govet
-    - staticcheck
-    - ineffassign
     - revive
-issues:
-  exclude-use-default: false
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

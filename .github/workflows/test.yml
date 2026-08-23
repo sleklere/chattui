@@ -27,9 +27,11 @@ jobs:
       - name: golangci-lint
         # go install compiles from source with the current Go toolchain, avoiding
         # pre-built binary incompatibility with newer Go versions.
+        # The /v2 module path is required: the path without it resolves to the
+        # last v1 release, which cannot read a version:"2" config.
         # govet runs inside golangci-lint, so no separate `go vet` step is needed.
         run: |
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
           golangci-lint run ./...
 
   unit:

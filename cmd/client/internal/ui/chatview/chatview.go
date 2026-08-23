@@ -46,11 +46,11 @@ func Render(msgs []Message, meID int64, width int) string {
 				lines = append(lines, "")
 			}
 			lines = append(lines, components.LabeledRule(width, dayLabel(msg.At)), "")
-		} else if !grouped(*prev, msg, meID) {
+		} else if !grouped(*prev, msg) {
 			lines = append(lines, "")
 		}
 
-		if prev == nil || !sameDay(prev.At, msg.At) || !grouped(*prev, msg, meID) {
+		if prev == nil || !sameDay(prev.At, msg.At) || !grouped(*prev, msg) {
 			stamp := timeStyle.Render(msg.At.Format("15:04"))
 			lines = append(lines, header(msg, meID, width, stamp))
 		}
@@ -85,7 +85,7 @@ func header(msg Message, meID int64, width int, stamp string) string {
 }
 
 // grouped reports whether msg continues the block started by prev.
-func grouped(prev, msg Message, meID int64) bool {
+func grouped(prev, msg Message) bool {
 	if prev.SenderID != msg.SenderID {
 		return false
 	}
