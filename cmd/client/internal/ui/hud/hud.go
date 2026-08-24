@@ -6,9 +6,10 @@ package hud
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/theme"
 )
@@ -163,17 +164,17 @@ func (f Frame) tabs() string {
 
 func (f Frame) statusChip() string {
 	t := theme.Current
-	var color lipgloss.Color
+	var c color.Color
 	var label string
 	switch CurrentSession.Status {
 	case StatusLive:
-		color, label = t.Success, "live"
+		c, label = t.Success, "live"
 	case StatusConnecting:
-		color, label = t.Gold, "connecting"
+		c, label = t.Gold, "connecting"
 	default:
-		color, label = t.Error, "offline"
+		c, label = t.Error, "offline"
 	}
-	return lipgloss.NewStyle().Foreground(color).Render("●") + " " +
+	return lipgloss.NewStyle().Foreground(c).Render("●") + " " +
 		lipgloss.NewStyle().Foreground(t.Subtle).Render(label)
 }
 

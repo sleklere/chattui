@@ -9,10 +9,10 @@ import (
 
 	"encoding/json"
 
-	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/sleklere/chattui/cmd/client/internal/api"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/components"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/hud"
@@ -197,8 +197,9 @@ func New(apiClient *api.Client, _ int64, width, height int) Model {
 	l.SetShowHelp(false)
 	l.Styles.PaginationStyle = lipgloss.NewStyle().Foreground(t.Overlay).Padding(0, 0, 0, 2)
 	l.FilterInput.Prompt = "/ "
-	l.Styles.FilterPrompt = lipgloss.NewStyle().Foreground(t.Accent)
-	l.Styles.FilterCursor = lipgloss.NewStyle().Foreground(t.Gold)
+	filter := components.InputStyles()
+	filter.Cursor.Color = t.Gold
+	l.FilterInput.SetStyles(filter)
 
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -222,7 +223,7 @@ func (m Model) Init() tea.Cmd {
 // Update handles messages for the inbox model.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if m.showingHelp {
 			if msg.String() == "?" || msg.String() == "esc" {
 				m.showingHelp = false

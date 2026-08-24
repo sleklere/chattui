@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"log/slog"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/sleklere/chattui/cmd/client/internal/api"
 	"github.com/sleklere/chattui/cmd/client/internal/config"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/auth"
@@ -128,7 +128,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if msg.String() == "ctrl+c" {
 			return a, tea.Quit
 		}
@@ -332,8 +332,15 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
-// View renders the active screen.
-func (a *App) View() string {
+// View renders the active screen. The alt screen is a View field in Bubble Tea
+// v2 rather than a program option, so it is declared on every frame.
+func (a *App) View() tea.View {
+	v := tea.NewView(a.body())
+	v.AltScreen = true
+	return v
+}
+
+func (a *App) body() string {
 	switch a.active {
 	case screenAuth:
 		return a.auth.View()

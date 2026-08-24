@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/textinput"
+	"charm.land/lipgloss/v2"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/components"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/theme"
 )
@@ -68,14 +68,14 @@ func header(msg Message, meID int64, width int, stamp string) string {
 	t := theme.Current
 
 	name := msg.Sender
-	color := theme.SpeakerColor(msg.Sender)
+	c := theme.SpeakerColor(msg.Sender)
 	if msg.SenderID == meID {
 		name = "you"
-		color = t.OwnMsg
+		c = t.OwnMsg
 	}
 
-	left := lipgloss.NewStyle().Foreground(color).Render("●") + " " +
-		lipgloss.NewStyle().Foreground(color).Bold(true).Render(name)
+	left := lipgloss.NewStyle().Foreground(c).Render("●") + " " +
+		lipgloss.NewStyle().Foreground(c).Bold(true).Render(name)
 
 	gap := width - lipgloss.Width(left) - lipgloss.Width(stamp) - 1
 	if gap < 1 {
@@ -128,9 +128,11 @@ func Composer(input textinput.Model, width int) string {
 	t := theme.Current
 	prompt := lipgloss.NewStyle().Foreground(t.Accent).Bold(true).Render("❯ ")
 
-	boxWidth := width - 4
-	if boxWidth < 10 {
-		boxWidth = 10
+	// Lip Gloss v2 counts the border inside Width, so the box asks for the two
+	// columns the border used to add on top of it.
+	boxWidth := width - 2
+	if boxWidth < 12 {
+		boxWidth = 12
 	}
 
 	return lipgloss.NewStyle().

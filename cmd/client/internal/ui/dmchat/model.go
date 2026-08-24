@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/textinput"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
 	"github.com/sleklere/chattui/cmd/client/internal/api"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/chatview"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/components"
@@ -56,14 +56,15 @@ func New(
 	myUsername string,
 	width, height int,
 ) Model {
-	vp := viewport.New(width, historyHeight(height))
+	vp := viewport.New(viewport.WithWidth(width), viewport.WithHeight(historyHeight(height)))
 
 	input := textinput.New()
 	input.Placeholder = "message @" + peerUsername
 	input.Prompt = ""
 	input.Focus()
 	input.CharLimit = 500
-	input.Width = width - 8
+	input.SetWidth(width - 8)
+	input.SetStyles(components.InputStyles())
 
 	return Model{
 		apiClient:      apiClient,
@@ -109,7 +110,7 @@ func (m Model) Init() tea.Cmd {
 // Update handles messages for the DM chat model.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "esc":
 			return m, func() tea.Msg { return LeaveDMMsg{} }
@@ -152,9 +153,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.viewport.Width = msg.Width
-		m.viewport.Height = historyHeight(msg.Height)
-		m.input.Width = msg.Width - 8
+		m.viewport.SetWidth(msg.Width)
+		m.viewport.SetHeight(historyHeight(msg.Height))
+		m.input.SetWidth(msg.Width - 8)
 		m.updateViewport()
 	}
 
@@ -190,9 +191,9 @@ func (m Model) View() string {
 
 	body := m.viewport.View()
 	if m.loading {
-		body = components.Empty(m.width, m.viewport.Height, "loading history…", "")
+		body = components.Empty(m.width, m.viewport.Height(), "loading history…", "")
 	} else if len(m.messages) == 0 {
-		body = components.Empty(m.width, m.viewport.Height, "No messages yet", "this is the beginning of your conversation with "+m.peerUsername)
+		body = components.Empty(m.width, m.viewport.Height(), "No messages yet", "this is the beginning of your conversation with "+m.peerUsername)
 	}
 
 	return frame.Render(body + "\n" + chatview.Composer(m.input, m.width))

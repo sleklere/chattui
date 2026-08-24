@@ -3,7 +3,7 @@ package inbox
 import (
 	"testing"
 
-	"github.com/charmbracelet/bubbles/list"
+	"charm.land/bubbles/v2/list"
 	"github.com/sleklere/chattui/pkg/dto"
 )
 

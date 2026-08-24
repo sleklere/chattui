@@ -3,7 +3,7 @@ package hud
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/theme"
 )

@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"os"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/joho/godotenv"
 	"github.com/sleklere/chattui/cmd/client/internal/config"
 	"github.com/sleklere/chattui/cmd/client/internal/ui"
@@ -29,7 +29,7 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(logFile, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	app := ui.NewApp(cfg, logger)
-	p := tea.NewProgram(&app, tea.WithAltScreen())
+	p := tea.NewProgram(&app)
 	app.SetProgram(p)
 
 	if _, err := p.Run(); err != nil {

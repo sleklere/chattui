@@ -6,11 +6,11 @@ import (
 	"io"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/spinner"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/sleklere/chattui/cmd/client/internal/api"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/components"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/hud"
@@ -124,10 +124,10 @@ func New(apiClient *api.Client, badges map[int64]int64, inboxTotal int64, width,
 
 	input := textinput.New()
 	input.Prompt = "❯ "
-	input.PromptStyle = lipgloss.NewStyle().Foreground(theme.Current.Accent)
 	input.Placeholder = "room name"
 	input.CharLimit = 50
-	input.Width = 28
+	input.SetWidth(28)
+	input.SetStyles(components.InputStyles())
 
 	return Model{
 		apiClient:   apiClient,
@@ -150,9 +150,9 @@ func configureList(l *list.Model) {
 	l.SetShowPagination(true)
 	l.Styles.PaginationStyle = lipgloss.NewStyle().Foreground(t.Overlay).Padding(0, 0, 0, 2)
 	l.FilterInput.Prompt = "/ "
-	l.FilterInput.PromptStyle = lipgloss.NewStyle().Foreground(t.Accent)
-	l.Styles.FilterPrompt = lipgloss.NewStyle().Foreground(t.Accent)
-	l.Styles.FilterCursor = lipgloss.NewStyle().Foreground(t.Gold)
+	filter := components.InputStyles()
+	filter.Cursor.Color = t.Gold
+	l.FilterInput.SetStyles(filter)
 }
 
 func newSpinner() spinner.Model {
@@ -176,7 +176,7 @@ func (m Model) Init() tea.Cmd {
 // Update handles messages for the rooms model.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if m.creating {
 			return m.updateCreating(msg)
 		}
@@ -223,6 +223,15 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			if item, ok := m.list.SelectedItem().(roomItem); ok {
 				return m, m.joinAndSelect(item.room)
 			}
+		}
+
+	case tea.PasteMsg:
+		// Pastes are their own message in Bubble Tea v2, so the create modal has
+		// to claim them or they fall through to the list below.
+		if m.creating {
+			var cmd tea.Cmd
+			m.createInput, cmd = m.createInput.Update(msg)
+			return m, cmd
 		}
 
 	case spinner.TickMsg:
@@ -356,7 +365,7 @@ func helpSections() []hud.HelpSection {
 	}
 }
 
-func (m Model) updateThemePicker(msg tea.KeyMsg) (Model, tea.Cmd) {
+func (m Model) updateThemePicker(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	names := theme.Names
 	switch msg.String() {
 	case "j", "down":
@@ -401,7 +410,7 @@ func (m Model) themeList() string {
 	return b.String()
 }
 
-func (m Model) updateCreating(msg tea.KeyMsg) (Model, tea.Cmd) {
+func (m Model) updateCreating(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
 		name := strings.TrimSpace(m.createInput.Value())

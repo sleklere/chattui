@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/spinner"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/sleklere/chattui/cmd/client/internal/api"
+	"github.com/sleklere/chattui/cmd/client/internal/ui/components"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/theme"
 	"github.com/sleklere/chattui/pkg/dto"
 )
@@ -20,6 +21,12 @@ var wordmark = []string{
 	"│  ├─┤├─┤ │  │ │ ││",
 	"└─┘┴ ┴┴ ┴ ┴  ┴ └─┘┴",
 }
+
+// fieldWidth is the number of columns a login field renders into: the 40-column
+// card body less the two-space indent, minus the trailing cell Bubbles keeps for
+// the cursor. Bubbles v2 needs an explicit width or it clips the placeholder to
+// its first character.
+const fieldWidth = 37
 
 type mode int
 
@@ -61,12 +68,16 @@ func New(apiClient *api.Client) Model {
 	username.Placeholder = "username"
 	username.Focus()
 	username.CharLimit = 32
+	username.SetWidth(fieldWidth)
+	username.SetStyles(components.InputStyles())
 
 	password := textinput.New()
 	password.Prompt = ""
 	password.Placeholder = "password"
 	password.EchoMode = textinput.EchoPassword
 	password.CharLimit = 64
+	password.SetWidth(fieldWidth)
+	password.SetStyles(components.InputStyles())
 
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -89,7 +100,7 @@ func (m Model) Init() tea.Cmd {
 // Update handles messages for the auth model.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		m.err = ""
 		switch msg.String() {
 		case "tab", "shift+tab":
@@ -154,7 +165,7 @@ func (m Model) View() string {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(t.Overlay).
 		Padding(1, 3).
-		Width(46).
+		Width(48). // border included in v2: 46 of card plus its two edges
 		Render(b.String())
 
 	toggle := "no account yet?  ctrl+t to register"

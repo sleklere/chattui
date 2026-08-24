@@ -6,7 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/textinput"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/sleklere/chattui/cmd/client/internal/ui/theme"
 )
@@ -132,4 +133,21 @@ func Empty(width, height int, title, hint string) string {
 		height = 3
 	}
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, body)
+}
+
+// InputStyles returns the styling shared by every text input in the app: an
+// accent prompt, a subdued placeholder and a plain cursor that only reverses
+// the cell it sits on. Bubbles v2 replaced the loose style fields with a struct
+// that has to be set as a whole, so the defaults are spelled out here.
+func InputStyles() textinput.Styles {
+	state := textinput.StyleState{
+		Prompt:      lipgloss.NewStyle().Foreground(theme.Current.Accent),
+		Placeholder: lipgloss.NewStyle().Foreground(lipgloss.Color("240")),
+		Suggestion:  lipgloss.NewStyle().Foreground(lipgloss.Color("240")),
+	}
+	return textinput.Styles{
+		Focused: state,
+		Blurred: state,
+		Cursor:  textinput.CursorStyle{Blink: true},
+	}
 }
