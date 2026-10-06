@@ -1,6 +1,7 @@
-.PHONY: run-server run-client migrate migrate-down migrate-status check-e2e check-protocol check-room check-dm
+.PHONY: lint run-server run-client migrate migrate-down migrate-status check-e2e check-protocol check-room check-dm
 
 lint:
+	@test -z "$$(gofmt -l .)" || { gofmt -l .; exit 1; }
 	golangci-lint run ./...
 
 run-server:

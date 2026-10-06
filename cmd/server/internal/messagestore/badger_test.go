@@ -23,7 +23,7 @@ func (m *testMetadata) ValidateMessage(context.Context, dbstore.CreateMessagePar
 	return m.err
 }
 func (m *testMetadata) Username(context.Context, int64) (string, error) { return m.username, m.err }
-func int8(id int64) pgtype.Int8                                         { return pgtype.Int8{Int64: id, Valid: true} }
+func pgInt8(id int64) pgtype.Int8                                       { return pgtype.Int8{Int64: id, Valid: true} }
 
 func openTest(t *testing.T, path string, metadata Metadata) *Badger {
 	t.Helper()
@@ -45,7 +45,7 @@ func TestHistoryOrderLimitAndIsolation(t *testing.T) {
 	ctx := context.Background()
 	s := openTest(t, t.TempDir(), &testMetadata{username: "alice"})
 	for i := 1; i <= 12; i++ {
-		m, err := s.CreateMessage(ctx, dbstore.CreateMessageParams{RoomID: int8(1), SenderID: 1, Body: fmt.Sprintf("message %d", i)})
+		m, err := s.CreateMessage(ctx, dbstore.CreateMessageParams{RoomID: pgInt8(1), SenderID: 1, Body: fmt.Sprintf("message %d", i)})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -54,40 +54,40 @@ func TestHistoryOrderLimitAndIsolation(t *testing.T) {
 		}
 	}
 	for _, p := range []dbstore.CreateMessageParams{
-		{RoomID: int8(2), SenderID: 2, Body: "other room"},
-		{RoomID: int8(256), SenderID: 2, Body: "binary room ID"},
-		{ConversationID: int8(1), SenderID: 1, Body: "private"},
+		{RoomID: pgInt8(2), SenderID: 2, Body: "other room"},
+		{RoomID: pgInt8(256), SenderID: 2, Body: "binary room ID"},
+		{ConversationID: pgInt8(1), SenderID: 1, Body: "private"},
 	} {
 		if _, err := s.CreateMessage(ctx, p); err != nil {
 			t.Fatal(err)
 		}
 	}
-	rows, err := s.ListMessagesByRoom(ctx, dbstore.ListMessagesByRoomParams{RoomID: int8(1), Limit: 3})
+	rows, err := s.ListMessagesByRoom(ctx, dbstore.ListMessagesByRoomParams{RoomID: pgInt8(1), Limit: 3})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(rows) != 3 || rows[0].ID != 12 || rows[1].ID != 11 || rows[2].ID != 10 || rows[0].SenderUsername != "alice" {
 		t.Fatalf("unexpected history: %+v", rows)
 	}
-	dms, err := s.ListMessagesByConversation(ctx, dbstore.ListMessagesByConversationParams{ConversationID: int8(1), Limit: 100})
+	dms, err := s.ListMessagesByConversation(ctx, dbstore.ListMessagesByConversationParams{ConversationID: pgInt8(1), Limit: 100})
 	if err != nil || len(dms) != 1 || dms[0].Body != "private" {
 		t.Fatalf("DM history: %+v, %v", dms, err)
 	}
-	binaryRows, err := s.ListMessagesByRoom(ctx, dbstore.ListMessagesByRoomParams{RoomID: int8(256), Limit: 100})
+	binaryRows, err := s.ListMessagesByRoom(ctx, dbstore.ListMessagesByRoomParams{RoomID: pgInt8(256), Limit: 100})
 	if err != nil || len(binaryRows) != 1 || binaryRows[0].Body != "binary room ID" {
 		t.Fatalf("binary room ID history: %+v, %v", binaryRows, err)
 	}
 	for _, id := range []int64{3, 257} {
-		rows, err := s.ListMessagesByRoom(ctx, dbstore.ListMessagesByRoomParams{RoomID: int8(id), Limit: 100})
+		rows, err := s.ListMessagesByRoom(ctx, dbstore.ListMessagesByRoomParams{RoomID: pgInt8(id), Limit: 100})
 		if err != nil || len(rows) != 0 {
 			t.Fatalf("empty room: %+v, %v", rows, err)
 		}
 	}
-	rows, err = s.ListMessagesByRoom(ctx, dbstore.ListMessagesByRoomParams{RoomID: int8(1), Limit: 0})
+	rows, err = s.ListMessagesByRoom(ctx, dbstore.ListMessagesByRoomParams{RoomID: pgInt8(1), Limit: 0})
 	if err != nil || len(rows) != 0 {
 		t.Fatalf("zero limit: %+v, %v", rows, err)
 	}
-	if _, err = s.ListMessagesByRoom(ctx, dbstore.ListMessagesByRoomParams{RoomID: int8(1), Limit: -1}); err == nil {
+	if _, err = s.ListMessagesByRoom(ctx, dbstore.ListMessagesByRoomParams{RoomID: pgInt8(1), Limit: -1}); err == nil {
 		t.Fatal("negative limit accepted")
 	}
 }
@@ -97,7 +97,7 @@ func TestReopenPreservesMessagesAndCounter(t *testing.T) {
 	path := t.TempDir()
 	metadata := &testMetadata{username: "alice"}
 	s := openTest(t, path, metadata)
-	first, err := s.CreateMessage(ctx, dbstore.CreateMessageParams{RoomID: int8(1), SenderID: 1, Body: "durable"})
+	first, err := s.CreateMessage(ctx, dbstore.CreateMessageParams{RoomID: pgInt8(1), SenderID: 1, Body: "durable"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,11 +108,11 @@ func TestReopenPreservesMessagesAndCounter(t *testing.T) {
 		t.Fatal(err)
 	}
 	s = openTest(t, path, metadata)
-	second, err := s.CreateMessage(ctx, dbstore.CreateMessageParams{RoomID: int8(1), SenderID: 1, Body: "after restart"})
+	second, err := s.CreateMessage(ctx, dbstore.CreateMessageParams{RoomID: pgInt8(1), SenderID: 1, Body: "after restart"})
 	if err != nil || second.ID != first.ID+1 {
 		t.Fatalf("counter: %+v, %v", second, err)
 	}
-	rows, err := s.ListMessagesByRoom(ctx, dbstore.ListMessagesByRoomParams{RoomID: int8(1), Limit: 10})
+	rows, err := s.ListMessagesByRoom(ctx, dbstore.ListMessagesByRoomParams{RoomID: pgInt8(1), Limit: 10})
 	if err != nil || len(rows) != 2 || rows[1].Body != first.Body || !rows[1].CreatedAt.Time.Equal(first.CreatedAt.Time) {
 		t.Fatalf("reopened history: %+v, %v", rows, err)
 	}
@@ -128,7 +128,7 @@ func TestConcurrentMessageIDs(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			m, err := s.CreateMessage(context.Background(), dbstore.CreateMessageParams{RoomID: int8(1), SenderID: 1, Body: "concurrent"})
+			m, err := s.CreateMessage(context.Background(), dbstore.CreateMessageParams{RoomID: pgInt8(1), SenderID: 1, Body: "concurrent"})
 			if err != nil {
 				errs <- err
 				return
@@ -152,7 +152,7 @@ func TestConcurrentMessageIDs(t *testing.T) {
 	if len(unique) != count {
 		t.Fatalf("persisted %d of %d", len(unique), count)
 	}
-	rows, err := s.ListMessagesByRoom(context.Background(), dbstore.ListMessagesByRoomParams{RoomID: int8(1), Limit: count})
+	rows, err := s.ListMessagesByRoom(context.Background(), dbstore.ListMessagesByRoomParams{RoomID: pgInt8(1), Limit: count})
 	if err != nil || len(rows) != count {
 		t.Fatalf("history count: %d, %v", len(rows), err)
 	}
@@ -162,14 +162,14 @@ func TestWriteFailuresDoNotConsumeIDs(t *testing.T) {
 	metadata := &testMetadata{err: errors.New("metadata unavailable")}
 	s := openTest(t, t.TempDir(), metadata)
 	ctx := context.Background()
-	p := dbstore.CreateMessageParams{RoomID: int8(1), SenderID: 1, Body: "hello"}
+	p := dbstore.CreateMessageParams{RoomID: pgInt8(1), SenderID: 1, Body: "hello"}
 	if _, err := s.CreateMessage(ctx, p); !errors.Is(err, metadata.err) {
 		t.Fatalf("metadata failure: %v", err)
 	}
 	metadata.err = nil
 	for _, invalid := range []dbstore.CreateMessageParams{
-		{SenderID: 1}, {RoomID: int8(1), ConversationID: int8(1), SenderID: 1},
-		{RoomID: int8(-1), SenderID: 1}, {RoomID: int8(1), SenderID: 0},
+		{SenderID: 1}, {RoomID: pgInt8(1), ConversationID: pgInt8(1), SenderID: 1},
+		{RoomID: pgInt8(-1), SenderID: 1}, {RoomID: pgInt8(1), SenderID: 0},
 	} {
 		if _, err := s.CreateMessage(ctx, invalid); err == nil {
 			t.Fatal("invalid message accepted")
@@ -180,7 +180,7 @@ func TestWriteFailuresDoNotConsumeIDs(t *testing.T) {
 	if _, err := s.CreateMessage(canceled, p); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled write: %v", err)
 	}
-	if _, err := s.ListMessagesByRoom(canceled, dbstore.ListMessagesByRoomParams{RoomID: int8(1), Limit: 10}); !errors.Is(err, context.Canceled) {
+	if _, err := s.ListMessagesByRoom(canceled, dbstore.ListMessagesByRoomParams{RoomID: pgInt8(1), Limit: 10}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled read: %v", err)
 	}
 	m, err := s.CreateMessage(ctx, p)
@@ -204,11 +204,11 @@ func TestRecoverAfterProcessExit(t *testing.T) {
 		t.Fatalf("writer: %v\n%s", err, output)
 	}
 	s := openTest(t, path, &testMetadata{username: "alice"})
-	rows, err := s.ListMessagesByRoom(context.Background(), dbstore.ListMessagesByRoomParams{RoomID: int8(1), Limit: 10})
+	rows, err := s.ListMessagesByRoom(context.Background(), dbstore.ListMessagesByRoomParams{RoomID: pgInt8(1), Limit: 10})
 	if err != nil || len(rows) != 1 || rows[0].Body != "before exit" {
 		t.Fatalf("recovered history: %+v, %v", rows, err)
 	}
-	m, err := s.CreateMessage(context.Background(), dbstore.CreateMessageParams{RoomID: int8(1), SenderID: 1, Body: "recovered"})
+	m, err := s.CreateMessage(context.Background(), dbstore.CreateMessageParams{RoomID: pgInt8(1), SenderID: 1, Body: "recovered"})
 	if err != nil || m.ID != 2 {
 		t.Fatalf("recovered counter: %+v, %v", m, err)
 	}
@@ -223,7 +223,7 @@ func TestCrashWriter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateMessage(context.Background(), dbstore.CreateMessageParams{RoomID: int8(1), SenderID: 1, Body: "before exit"}); err != nil {
+	if _, err := s.CreateMessage(context.Background(), dbstore.CreateMessageParams{RoomID: pgInt8(1), SenderID: 1, Body: "before exit"}); err != nil {
 		t.Fatal(err)
 	}
 	os.Exit(0)

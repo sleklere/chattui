@@ -41,7 +41,11 @@ func TestDockerSmoke(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer resp.Body.Close()
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				t.Errorf("close health response: %v", err)
+			}
+		}()
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("health status: %d", resp.StatusCode)
 		}
@@ -51,7 +55,9 @@ func TestDockerSmoke(t *testing.T) {
 		t.Fatal(err)
 	}
 	if resp, err := client.Get(endpoint + "/healthz"); err == nil {
-		resp.Body.Close()
+		if err := resp.Body.Close(); err != nil {
+			t.Errorf("close unexpected health response: %v", err)
+		}
 		t.Fatal("stopped server still responds")
 	}
 	if err := env.StartServer(ctx); err != nil {

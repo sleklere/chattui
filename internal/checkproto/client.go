@@ -19,19 +19,26 @@ import (
 	"github.com/coder/websocket"
 )
 
+// User identifies an account returned by the public API.
 type User struct {
 	ID       int64  `json:"id"`
 	Username string `json:"username"`
 }
+
+// Room identifies a chat room and its public slug.
 type Room struct {
 	ID   int64  `json:"id"`
 	Name string `json:"name"`
 	Slug string `json:"slug"`
 }
+
+// Conversation identifies a DM chat and its peer for the current user.
 type Conversation struct {
 	ID     int64 `json:"id"`
 	PeerID int64 `json:"peer_id"`
 }
+
+// HistoryMessage captures persisted IDs and content returned by REST history.
 type HistoryMessage struct {
 	ID             int64  `json:"id"`
 	RoomID         *int64 `json:"room_id"`
@@ -44,6 +51,8 @@ type authResponse struct {
 	Token     string `json:"token"`
 	ExpiresAt int64  `json:"expires_at"`
 }
+
+// Event contains the routing and message fields of a WebSocket envelope.
 type Event struct {
 	Type    string `json:"type"`
 	Payload struct {
@@ -55,6 +64,8 @@ type Event struct {
 		MessageID  int64  `json:"message_id"`
 	} `json:"payload"`
 }
+
+// Observation records the receiving user and the runner's receive time.
 type Observation struct {
 	UserID int64     `json:"user_id"`
 	Event  Event     `json:"event"`
@@ -89,10 +100,12 @@ func validateEndpoints(httpURL, wsURL string) error {
 	}
 	return nil
 }
+
+// NewClient creates a REST/WebSocket client with a bounded HTTP timeout.
 func NewClient(httpURL, wsURL string) *Client {
 	return &Client{HTTPURL: strings.TrimRight(httpURL, "/"), WSURL: wsURL, HTTP: &http.Client{Timeout: 5 * time.Second}}
 }
-func (c *Client) request(ctx context.Context, method, path string, body any, status int, out any) error {
+func (c *Client) request(ctx context.Context, method, path string, body any, status int, out any) (err error) {
 	var r io.Reader
 	if body != nil {
 		b, e := json.Marshal(body)
@@ -115,7 +128,7 @@ func (c *Client) request(ctx context.Context, method, path string, body any, sta
 	if e != nil {
 		return fmt.Errorf("%s %s: %w", method, path, e)
 	}
-	defer resp.Body.Close()
+	defer func() { err = errors.Join(err, resp.Body.Close()) }()
 	if resp.StatusCode != status {
 		return fmt.Errorf("%s %s: status %d (expected %d)", method, path, resp.StatusCode, status)
 	}
@@ -135,36 +148,52 @@ func (c *Client) auth(ctx context.Context, route, username, password string) err
 	c.User, c.token, c.expiresAt = a.User, a.Token, a.ExpiresAt
 	return nil
 }
+
+// Register creates a fixture account and retains its authentication in memory.
 func (c *Client) Register(ctx context.Context, username, password string) error {
 	return c.auth(ctx, "/auth/register", username, password)
 }
+
+// Login authenticates an existing fixture account.
 func (c *Client) Login(ctx context.Context, username, password string) error {
 	return c.auth(ctx, "/auth/login", username, password)
 }
+
+// ValidFor checks that authentication will outlast the run and receive drain.
 func (c *Client) ValidFor(d time.Duration) error {
 	if c.token == "" || time.Unix(c.expiresAt, 0).Before(time.Now().Add(d+5*time.Second)) {
 		return errors.New("JWT expires before run and drain finish")
 	}
 	return nil
 }
+
+// CreateRoom creates a room through the authenticated REST API.
 func (c *Client) CreateRoom(ctx context.Context, name string) (Room, error) {
 	var v Room
 	e := c.request(ctx, "POST", "/rooms/", map[string]string{"name": name}, 201, &v)
 	return v, e
 }
+
+// JoinRoom adds the current user to an existing room.
 func (c *Client) JoinRoom(ctx context.Context, id int64) error {
 	return c.request(ctx, "POST", "/rooms/"+strconv.FormatInt(id, 10)+"/join", nil, 204, nil)
 }
+
+// Lookup resolves a username to its current public identity.
 func (c *Client) Lookup(ctx context.Context, name string) (User, error) {
 	var v User
 	e := c.request(ctx, "GET", "/users/?username="+url.QueryEscape(name), nil, 200, &v)
 	return v, e
 }
+
+// Conversations lists up to 100 DM conversations for the current user.
 func (c *Client) Conversations(ctx context.Context) ([]Conversation, error) {
 	var v []Conversation
 	e := c.request(ctx, "GET", "/conversations/?limit=100", nil, 200, &v)
 	return v, e
 }
+
+// History retrieves up to 100 messages for a room or conversation.
 func (c *Client) History(ctx context.Context, kind string, id int64) ([]HistoryMessage, error) {
 	if kind != "rooms" && kind != "conversations" {
 		return nil, errors.New("invalid history kind")
@@ -173,6 +202,8 @@ func (c *Client) History(ctx context.Context, kind string, id int64) ([]HistoryM
 	e := c.request(ctx, "GET", "/"+kind+"/"+strconv.FormatInt(id, 10)+"/messages?limit=100", nil, 200, &v)
 	return v, e
 }
+
+// Connect opens one socket and starts bounded observation collection.
 func (c *Client) Connect(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -218,8 +249,14 @@ func (c *Client) Connect(ctx context.Context) error {
 	}()
 	return nil
 }
+
+// Events returns observations for the current socket; it closes when reading stops.
 func (c *Client) Events() <-chan Observation { return c.events }
-func (c *Client) ReadError() <-chan error    { return c.readErr }
+
+// ReadError returns unexpected socket failures or observation overflow.
+func (c *Client) ReadError() <-chan error { return c.readErr }
+
+// Send writes one message envelope without retrying or claiming a persistence ACK.
 func (c *Client) Send(ctx context.Context, kind string, target int64, body string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -241,6 +278,8 @@ func (c *Client) Send(ctx context.Context, kind string, target int64, body strin
 	}
 	return c.conn.Write(ctx, websocket.MessageText, b)
 }
+
+// Close cancels the reader, closes the socket and waits for reader exit.
 func (c *Client) Close() {
 	c.mu.Lock()
 	defer c.mu.Unlock()

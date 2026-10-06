@@ -36,7 +36,7 @@ func TestClientRESTAndWebSocket(t *testing.T) {
 			t.Error(e)
 			return
 		}
-		defer conn.CloseNow()
+		defer func() { _ = conn.CloseNow() }() // Peer closure is expected during teardown.
 		_, b, e := conn.Read(r.Context())
 		if e != nil {
 			return

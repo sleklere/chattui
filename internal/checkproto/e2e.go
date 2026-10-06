@@ -12,10 +12,13 @@ import (
 	"time"
 )
 
+// Lifecycle controls the server without replacing its persistent storage.
 type Lifecycle struct {
 	Stop  func(context.Context) error
 	Start func(context.Context) error
 }
+
+// E2EConfig specifies endpoints, bounded observation windows and a private trace.
 type E2EConfig struct {
 	HTTPURL, WSURL string
 	Seed           int64
@@ -23,6 +26,8 @@ type E2EConfig struct {
 	Lifecycle      Lifecycle
 	TracePath      string
 }
+
+// E2ETrace records fixture identities, delivery evidence and completed stages.
 type E2ETrace struct {
 	Seed         int64         `json:"seed"`
 	RunID        string        `json:"run_id"`
@@ -34,7 +39,7 @@ type E2ETrace struct {
 	Failure      string        `json:"failure,omitempty"`
 }
 
-func saveTrace(path string, t E2ETrace) error {
+func saveTrace(path string, t E2ETrace) (err error) {
 	if path == "" {
 		return nil
 	}
@@ -46,7 +51,7 @@ func saveTrace(path string, t E2ETrace) error {
 	if e != nil {
 		return e
 	}
-	defer f.Close()
+	defer func() { err = errors.Join(err, f.Close()) }()
 	_, e = f.Write(append(b, '\n'))
 	return e
 }

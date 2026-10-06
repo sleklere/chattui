@@ -31,6 +31,15 @@ The runner creates fixture accounts and messages there; it never stops, deletes 
 
 Validation happens before building or starting containers. On success the process prints `PASS` and exits zero. A failed assertion, incomplete sampling, image-ID mismatch or cleanup failure returns nonzero. Successful Docker cleanup removes only resources labeled for the run; shared image cleanup first verifies its owner label, pinned ID and sole tag. Failed ownership checks leave the image for manual inspection rather than deleting a foreign reference. No runner path invokes Docker prune, `docker compose down`, `git clean` or page-cache flushing.
 
+Before publishing changes, run the formatting and linter checks used by CI:
+
+```sh
+make lint
+go test -mod=readonly -race -count=1 ./...
+```
+
+`make lint` requires `golangci-lint` v2 and uses `.golangci.yml`. A passing `go vet` does not substitute for the configured linter. CI also runs unit and server integration tests; the complete protocol/TUI runner above is a separate check.
+
 Focused tests (Docker is not required; real Docker checks are not skipped into success by the CLI):
 
 ```sh

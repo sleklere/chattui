@@ -21,7 +21,7 @@ type fakeDocker struct {
 	port  string
 }
 
-func (f *fakeDocker) Run(ctx context.Context, args ...string) (CommandResult, error) {
+func (f *fakeDocker) Run(_ context.Context, args ...string) (CommandResult, error) {
 	f.calls = append(f.calls, append([]string{}, args...))
 	if len(args) > 3 && args[0] == "network" && args[1] == "create" {
 		f.label = strings.TrimPrefix(args[3], label+"=")

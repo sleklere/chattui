@@ -18,7 +18,7 @@ var clientEvents = []string{
 	"ws write error", "room selected", "left room", "ws received", "ws sent",
 }
 
-func saveClientLog(resultsDir, name, clientDir string) error {
+func saveClientLog(resultsDir, name, clientDir string) (err error) {
 	file, err := os.Open(filepath.Join(clientDir, "client.log"))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -26,7 +26,7 @@ func saveClientLog(resultsDir, name, clientDir string) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { err = errors.Join(err, file.Close()) }()
 	counts := make(map[string]int)
 	scanner := bufio.NewScanner(io.LimitReader(file, 1<<20))
 	for scanner.Scan() {

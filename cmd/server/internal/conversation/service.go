@@ -36,6 +36,7 @@ func NewService(s Store, l *slog.Logger, b bus.Bus, d db.Beginner, options ...Op
 	return svc
 }
 
+// Option configures the conversation service's message storage.
 type Option func(*Service)
 
 // WithMessageStore opts into separate message storage. PostgreSQL metadata and

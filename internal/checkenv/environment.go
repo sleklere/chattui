@@ -27,6 +27,7 @@ const defaultMemory = int64(2 * 1024 * 1024 * 1024)
 // Backend selects the message store; PostgreSQL always retains metadata.
 type Backend string
 
+// Supported message backends retain PostgreSQL metadata.
 const (
 	Postgres Backend = "postgres"
 	Badger   Backend = "badger"
@@ -46,7 +47,10 @@ type Config struct {
 	SharedImage    string // pinned sha256 image ID, built and owned by caller
 }
 
+// CommandResult keeps Docker stdout and stderr separate for redaction.
 type CommandResult struct{ Stdout, Stderr string }
+
+// Executor runs Docker commands; tests substitute an ownership-aware fake.
 type Executor interface {
 	Run(context.Context, ...string) (CommandResult, error)
 }
@@ -60,6 +64,7 @@ func (cli) Run(ctx context.Context, args ...string) (CommandResult, error) {
 	return CommandResult{Stdout: stdout.String(), Stderr: stderr.String()}, err
 }
 
+// Resource records inspected container identity, state and effective limits.
 type Resource struct {
 	Kind         string `json:"kind"`
 	Name         string `json:"name"`
@@ -71,6 +76,8 @@ type Resource struct {
 	Memory       int64  `json:"memory,omitempty"`
 	MemorySwap   int64  `json:"memory_swap,omitempty"`
 }
+
+// Snapshot captures resources and inspection failures at a point in time.
 type Snapshot struct {
 	ID        string     `json:"id"`
 	Backend   Backend    `json:"backend"`
@@ -93,6 +100,7 @@ type Environment struct {
 	sharedImage                    bool
 }
 
+// Start creates an owned environment and waits for database and HTTP readiness.
 func Start(ctx context.Context, cfg Config) (*Environment, error) { return start(ctx, cfg, cli{}) }
 
 type limits struct {
@@ -148,7 +156,7 @@ func start(ctx context.Context, cfg Config, x Executor) (env *Environment, err e
 		return nil, errors.New("repository and results directory must be absolute")
 	}
 	if _, e := os.Stat(filepath.Join(cfg.Repository, "Dockerfile")); e != nil {
-		return nil, fmt.Errorf("Dockerfile: %w", e)
+		return nil, fmt.Errorf("stat Dockerfile: %w", e)
 	}
 	if e := os.MkdirAll(cfg.ResultsDir, 0700); e != nil {
 		return nil, e
@@ -241,7 +249,7 @@ func start(ctx context.Context, cfg Config, x Executor) (env *Environment, err e
 	if e != nil {
 		return nil, e
 	}
-	defer os.Remove(pgEnv)
+	defer func() { err = errors.Join(err, os.Remove(pgEnv)) }()
 	phase = "postgres startup"
 	pg := []string{"run", "-d", "--name", env.names["postgres"], "--label", label + "=" + id, "--network", env.names["network"]}
 	pg = append(pg, postgresLimits.dockerArgs()...)
@@ -254,7 +262,7 @@ func start(ctx context.Context, cfg Config, x Executor) (env *Environment, err e
 	if e != nil {
 		return nil, e
 	}
-	defer os.Remove(serverEnv)
+	defer func() { err = errors.Join(err, os.Remove(serverEnv)) }()
 	timeout := cfg.ReadyTimeout
 	if timeout <= 0 {
 		timeout = 90 * time.Second
@@ -348,18 +356,22 @@ func (e *Environment) redact(s string) string {
 	}
 	return s
 }
-func (e *Environment) envFile(text string) (string, error) {
+func (e *Environment) envFile(text string) (name string, err error) {
 	f, err := os.CreateTemp(e.ResultsDir, ".docker-env-")
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer func() {
+		err = errors.Join(err, f.Close())
+		if err != nil {
+			err = errors.Join(err, os.Remove(f.Name()))
+			name = ""
+		}
+	}()
 	if err = f.Chmod(0600); err != nil {
-		os.Remove(f.Name())
 		return "", err
 	}
 	if _, err = f.WriteString(text); err != nil {
-		os.Remove(f.Name())
 		return "", err
 	}
 	return f.Name(), nil
@@ -412,7 +424,9 @@ func (e *Environment) waitHTTP(ctx context.Context) error {
 		}
 		resp, err := client.Do(req)
 		if err == nil {
-			resp.Body.Close()
+			if err := resp.Body.Close(); err != nil {
+				return err
+			}
 			if resp.StatusCode == 200 {
 				return nil
 			}
@@ -424,11 +438,15 @@ func (e *Environment) waitHTTP(ctx context.Context) error {
 		}
 	}
 }
+
+// StopServer stops the writer while retaining its storage and endpoint.
 func (e *Environment) StopServer(ctx context.Context) error {
 	_, err := e.run(ctx, "stop", "-t", "12", e.names["server"])
 	_, _ = e.Collect()
 	return err
 }
+
+// StartServer restarts the retained container and verifies readiness and endpoint.
 func (e *Environment) StartServer(ctx context.Context) error {
 	_, err := e.run(ctx, "start", e.names["server"])
 	if err != nil {
@@ -443,6 +461,8 @@ func (e *Environment) StartServer(ctx context.Context) error {
 	_, err = e.Collect()
 	return err
 }
+
+// RestartServer stops and starts the same server without resetting its dataset.
 func (e *Environment) RestartServer(ctx context.Context) error {
 	if err := e.StopServer(ctx); err != nil {
 		return err

@@ -46,6 +46,7 @@ func NewService(s Store, l *slog.Logger, b bus.Bus, d db.Beginner, options ...Op
 	return svc
 }
 
+// Option configures the room service's message storage.
 type Option func(*Service)
 
 // WithMessageStore selects message storage without changing room metadata storage.

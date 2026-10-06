@@ -20,19 +20,26 @@ import (
 	"github.com/sleklere/chattui/internal/checkproto"
 )
 
+// Config supplies a real client binary, private output and server lifecycle callbacks.
 type Config struct {
 	ClientBinary, HTTPURL, WSURL, Seed, ResultsDir string
 	Timeout                                        time.Duration
 	LifecycleStop, LifecycleStart                  func(context.Context) error
 }
+
+// Step records a completed keyboard workflow and its elapsed time.
 type Step struct {
 	Name       string `json:"name"`
 	DurationMS int64  `json:"duration_ms"`
 }
+
+// RunIdentity records a generated fixture account without its credentials.
 type RunIdentity struct {
 	Username string `json:"username"`
 	UserID   int64  `json:"user_id,omitempty"`
 }
+
+// RunConfig records reproducible terminal settings and non-secret fixture identities.
 type RunConfig struct {
 	Seed            string      `json:"seed"`
 	HTTPURL         string      `json:"http_url"`
@@ -45,6 +52,8 @@ type RunConfig struct {
 	RoomName        string      `json:"room_name"`
 	RoomID          int64       `json:"room_id,omitempty"`
 }
+
+// Result records completed TUI steps and any failure without raw terminal frames.
 type Result struct {
 	Config RunConfig `json:"config"`
 	Steps  []Step    `json:"steps"`
@@ -420,7 +429,7 @@ func verifyDM(ctx context.Context, c *checkproto.Client, sender int64, body stri
 		}
 	}
 }
-func roomByName(ctx context.Context, base, user, password, name string) (checkproto.Room, error) {
+func roomByName(ctx context.Context, base, user, password, name string) (room checkproto.Room, err error) {
 	// Read-only REST lookup after the UI creates the room. This second login is
 	// only for fetching a bearer token; no credential is serialized to results.
 	// The protocol client deliberately keeps its token private. Obtain a short-
@@ -435,7 +444,7 @@ func roomByName(ctx context.Context, base, user, password, name string) (checkpr
 	if e != nil {
 		return checkproto.Room{}, errors.New("room lookup login failed")
 	}
-	defer resp.Body.Close()
+	defer func() { err = errors.Join(err, resp.Body.Close()) }()
 	if resp.StatusCode != 200 {
 		return checkproto.Room{}, fmt.Errorf("room lookup login status %d", resp.StatusCode)
 	}
@@ -454,7 +463,7 @@ func roomByName(ctx context.Context, base, user, password, name string) (checkpr
 	if e != nil {
 		return checkproto.Room{}, errors.New("room lookup list failed")
 	}
-	defer resp2.Body.Close()
+	defer func() { err = errors.Join(err, resp2.Body.Close()) }()
 	if resp2.StatusCode != 200 {
 		return checkproto.Room{}, fmt.Errorf("room list status %d", resp2.StatusCode)
 	}

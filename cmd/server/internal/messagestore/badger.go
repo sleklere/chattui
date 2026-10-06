@@ -50,6 +50,7 @@ func Open(path string, metadata Metadata) (*Badger, error) {
 	return &Badger{db: db, metadata: metadata}, nil
 }
 
+// Close flushes pending database work and releases exclusive directory ownership.
 func (s *Badger) Close() error { return s.db.Close() }
 
 // record is the on-disk v1 format, independent of pgx's nullable types.
@@ -77,6 +78,7 @@ func chatPrefix(kind byte, id int64) []byte {
 	return binary.BigEndian.AppendUint64(prefix, uint64(id))
 }
 
+// CreateMessage validates metadata and atomically persists a message and its global ID.
 func (s *Badger) CreateMessage(ctx context.Context, p dbstore.CreateMessageParams) (dbstore.Message, error) {
 	if err := ctx.Err(); err != nil {
 		return dbstore.Message{}, err
@@ -180,10 +182,12 @@ func (s *Badger) list(ctx context.Context, kind byte, id pgtype.Int8, limit int3
 	return messages, nil
 }
 
+// ListMessagesByConversation returns reverse-ID history for one conversation.
 func (s *Badger) ListMessagesByConversation(ctx context.Context, p dbstore.ListMessagesByConversationParams) ([]dbstore.Message, error) {
 	return s.list(ctx, 'c', p.ConversationID, p.Limit)
 }
 
+// ListMessagesByRoom returns reverse-ID history with current sender usernames.
 func (s *Badger) ListMessagesByRoom(ctx context.Context, p dbstore.ListMessagesByRoomParams) ([]dbstore.ListMessagesByRoomRow, error) {
 	messages, err := s.list(ctx, 'r', p.RoomID, p.Limit)
 	if err != nil {

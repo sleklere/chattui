@@ -19,6 +19,8 @@ type Expected struct {
 	Deadline   time.Time `json:"deadline,omitempty"`
 	MessageID  int64     `json:"message_id,omitempty"`
 }
+
+// Check records delivery discrepancies and latencies for correlated messages.
 type Check struct {
 	Missing        []string        `json:"missing,omitempty"`
 	Duplicate      []string        `json:"duplicate,omitempty"`
@@ -29,6 +31,7 @@ type Check struct {
 	Latencies      []time.Duration `json:"-"`
 }
 
+// Err reports delivery discrepancies, or nil when every observation matches.
 func (c Check) Err() error {
 	if len(c.Missing)+len(c.Duplicate)+len(c.WrongRecipient)+len(c.Mismatch)+len(c.Unknown) > 0 {
 		return fmt.Errorf("protocol verification: missing=%v duplicate=%v wrong_recipient=%v mismatch=%v unknown=%v", c.Missing, c.Duplicate, c.WrongRecipient, c.Mismatch, c.Unknown)
@@ -141,6 +144,8 @@ func VerifyRecentHistory(messages []HistoryMessage, expected []Expected, kind st
 	}
 	return VerifyHistory(messages, expected, kind, target)
 }
+
+// Percentiles returns nearest-rank p50, p95 and p99 durations, or an empty map for no samples.
 func Percentiles(values []time.Duration) map[string]time.Duration {
 	out := map[string]time.Duration{}
 	if len(values) == 0 {

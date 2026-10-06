@@ -15,13 +15,16 @@ import (
 	"time"
 )
 
+// Profile selects the recipient topology for offered load.
 type Profile string
 
+// Supported load profiles exercise room broadcasts or direct-message pairs.
 const (
 	RoomProfile Profile = "room"
 	DMProfile   Profile = "dm"
 )
 
+// LoadConfig bounds the schedule and selects seeded fixtures and private output.
 type LoadConfig struct {
 	HTTPURL, WSURL            string
 	Profile                   Profile
@@ -35,6 +38,8 @@ type LoadConfig struct {
 	MaxDuration               time.Duration
 	FullTracePath, ResultsDir string
 }
+
+// LoadSummary separates offered sends from verified delivery and generator metrics.
 type LoadSummary struct {
 	RunID                  string                   `json:"run_id"`
 	Profile                Profile                  `json:"profile"`
@@ -60,7 +65,7 @@ type LoadSummary struct {
 	Failure                string                   `json:"failure,omitempty"`
 }
 
-// Explicit budgets prevent unbounded runs and token expiry in the measured interval.
+// Validate enforces explicit budgets and JWT lifetime safety margins.
 func (c LoadConfig) Validate() error {
 	if e := validateEndpoints(c.HTTPURL, c.WSURL); e != nil {
 		return e
@@ -97,12 +102,12 @@ func (c LoadConfig) stepped(step int) LoadConfig {
 	c.Duration = time.Duration(math.Min(float64(c.MaxDuration), float64(c.Duration)*math.Pow(2, float64(step))))
 	return c
 }
-func writeUnique(path string, b []byte) error {
+func writeUnique(path string, b []byte) (err error) {
 	f, e := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if e != nil {
 		return e
 	}
-	defer f.Close()
+	defer func() { err = errors.Join(err, f.Close()) }()
 	_, e = f.Write(append(b, '\n'))
 	return e
 }
@@ -354,9 +359,10 @@ func RunLoad(ctx context.Context, cfg LoadConfig) (summary LoadSummary, err erro
 		var disconnects int
 		for len(events) > 0 {
 			r := <-events
-			if r.ob.Event.Type == "__disconnect" {
+			switch r.ob.Event.Type {
+			case "__disconnect":
 				disconnects++
-			} else if r.ob.Event.Type == "room_message" || r.ob.Event.Type == "direct_message" {
+			case "room_message", "direct_message":
 				warmObserved = append(warmObserved, r.ob)
 			}
 		}
@@ -380,9 +386,10 @@ func RunLoad(ctx context.Context, cfg LoadConfig) (summary LoadSummary, err erro
 	}
 	for len(events) > 0 {
 		r := <-events
-		if r.ob.Event.Type == "__disconnect" {
+		switch r.ob.Event.Type {
+		case "__disconnect":
 			summary.Disconnects++
-		} else if r.ob.Event.Type == "room_message" || r.ob.Event.Type == "direct_message" {
+		case "room_message", "direct_message":
 			observed = append(observed, r.ob)
 		}
 	}
@@ -549,6 +556,8 @@ func RunSteps(ctx context.Context, cfg LoadConfig) ([]LoadSummary, error) {
 	}
 	return results, nil
 }
+
+// DiagnosticReplay retains the original failure and runs one separate diagnostic job.
 func DiagnosticReplay(ctx context.Context, cfg LoadConfig, original LoadSummary, originalErr error) (LoadSummary, error) {
 	if originalErr == nil || original.RunID == "" {
 		return LoadSummary{}, errors.New("diagnostic replay requires retained original failed run")

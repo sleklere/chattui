@@ -1,3 +1,4 @@
+// Command check runs isolated protocol, TUI and bounded backend load checks.
 package main
 
 import (
