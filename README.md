@@ -18,6 +18,20 @@ docker compose run --rm client         # TUI client
 ```
 
 For local development against a running Go toolchain, see the `Makefile`.
+For isolated protocol/TUI checks and bounded backend load comparisons, see [TESTING.md](TESTING.md).
+
+## Message storage
+
+PostgreSQL remains the default. To use Badger for room and direct messages:
+
+```bash
+MESSAGE_STORE=badger docker compose up -d --build server
+```
+
+Users, rooms, conversations and inbox data still use PostgreSQL. Compose keeps
+Badger files in the `badgerdata` volume. Switching backends does not migrate or
+merge message history. See [BADGER.md](BADGER.md) for the storage format,
+consistency limits, recovery and tests.
 
 ## Features
 
@@ -44,7 +58,8 @@ cmd/
       user/        # Bounded context: user lookup
       conversation/ # Bounded context: DM conversations
       ws/          # WebSocket hub + client dispatch
-      store/       # sqlc-generated DB layer (persistence adapter)
+      store/       # sqlc-generated PostgreSQL adapter
+      messagestore/ # Message interfaces, Badger adapter and PostgreSQL metadata
       httpx/       # HTTP helpers (error types, JSON writer)
       db/          # DB connection pool
     migrations/    # goose migrations
