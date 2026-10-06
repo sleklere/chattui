@@ -12,6 +12,7 @@ import (
 	"github.com/sleklere/chattui/cmd/server/internal/db"
 	"github.com/sleklere/chattui/cmd/server/internal/errs"
 	"github.com/sleklere/chattui/cmd/server/internal/event"
+	"github.com/sleklere/chattui/cmd/server/internal/messagestore"
 	dbstore "github.com/sleklere/chattui/cmd/server/internal/store"
 )
 
@@ -29,15 +30,27 @@ type Store interface {
 
 // Service provides room-related business logic.
 type Service struct {
-	logger *slog.Logger
-	store  Store
-	db     db.Beginner
-	bus    bus.Bus
+	logger   *slog.Logger
+	store    Store
+	db       db.Beginner
+	bus      bus.Bus
+	messages messagestore.RoomStore
 }
 
 // NewService creates a new room Service.
-func NewService(s Store, l *slog.Logger, b bus.Bus, d db.Beginner) *Service {
-	return &Service{store: s, logger: l, bus: b, db: d}
+func NewService(s Store, l *slog.Logger, b bus.Bus, d db.Beginner, options ...Option) *Service {
+	svc := &Service{store: s, logger: l, bus: b, db: d, messages: s}
+	for _, option := range options {
+		option(svc)
+	}
+	return svc
+}
+
+type Option func(*Service)
+
+// WithMessageStore selects message storage without changing room metadata storage.
+func WithMessageStore(messages messagestore.RoomStore) Option {
+	return func(s *Service) { s.messages = messages }
 }
 
 // Create creates a new room with the given name and adds the creator as a member.
@@ -137,7 +150,7 @@ func (s *Service) GetRoomsForUser(ctx context.Context, userID int64) ([]dbstore.
 
 // GetMessagesByRoomID returns messages for the given room up to the specified limit.
 func (s *Service) GetMessagesByRoomID(ctx context.Context, roomID int64, limit int32) ([]dbstore.ListMessagesByRoomRow, error) {
-	msgs, err := s.store.ListMessagesByRoom(ctx, dbstore.ListMessagesByRoomParams{
+	msgs, err := s.messages.ListMessagesByRoom(ctx, dbstore.ListMessagesByRoomParams{
 		RoomID: pgtype.Int8{Int64: roomID, Valid: true},
 		Limit:  limit,
 	})
@@ -150,7 +163,7 @@ func (s *Service) GetMessagesByRoomID(ctx context.Context, roomID int64, limit i
 
 // SendRoomMessage persists a room message and publishes a RoomMessageSentEvent.
 func (s *Service) SendRoomMessage(ctx context.Context, roomID int64, senderID int64, body string) (dbstore.Message, error) {
-	dbMsg, err := s.store.CreateMessage(ctx, dbstore.CreateMessageParams{
+	dbMsg, err := s.messages.CreateMessage(ctx, dbstore.CreateMessageParams{
 		RoomID:   pgtype.Int8{Int64: roomID, Valid: true},
 		SenderID: senderID,
 		Body:     body,

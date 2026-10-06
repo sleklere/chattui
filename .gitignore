@@ -21,6 +21,9 @@ go.work.sum
 # Environment
 .env
 
+# Local message storage
+/data/
+
 # Logs
 *.log
 

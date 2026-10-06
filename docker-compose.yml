@@ -26,6 +26,10 @@ services:
       DB_URL: postgres://chat:chat@postgres:5432/chattui?sslmode=disable
       PORT: "8080"
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      MESSAGE_STORE: ${MESSAGE_STORE:-postgres}
+      BADGER_PATH: /data/messages.badger
+    volumes:
+      - badgerdata:/data
     ports:
       - "8080:8080"
 
@@ -46,3 +50,4 @@ services:
 
 volumes:
   pgdata:
+  badgerdata:

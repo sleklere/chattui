@@ -20,6 +20,7 @@ import (
 	"github.com/sleklere/chattui/cmd/server/internal/conversation"
 	"github.com/sleklere/chattui/cmd/server/internal/db"
 	"github.com/sleklere/chattui/cmd/server/internal/inbox"
+	"github.com/sleklere/chattui/cmd/server/internal/messagestore"
 	"github.com/sleklere/chattui/cmd/server/internal/room"
 	dbstore "github.com/sleklere/chattui/cmd/server/internal/store"
 	"github.com/sleklere/chattui/cmd/server/internal/user"
@@ -61,14 +62,36 @@ func main() {
 
 	queries := dbstore.New(pool)
 	authSvc := auth.NewService(queries, logger, authCfg)
-	roomSvc := room.NewService(queries, logger, bus, pool)
+	var roomOptions []room.Option
+	var conversationOptions []conversation.Option
+	backend := getenv("MESSAGE_STORE", "postgres")
+	switch backend {
+	case "postgres":
+	case "badger":
+		path := getenv("BADGER_PATH", "data/messages.badger")
+		messages, err := messagestore.Open(path, messagestore.NewPostgresMetadata(pool))
+		if err != nil {
+			panic(err)
+		}
+		defer func() {
+			if err := messages.Close(); err != nil {
+				logger.Error("closing message store", "error", err)
+			}
+		}()
+		roomOptions = append(roomOptions, room.WithMessageStore(messages))
+		conversationOptions = append(conversationOptions, conversation.WithMessageStore(messages))
+		logger.Info("Badger message storage opened", "path", path)
+	default:
+		panic("unsupported MESSAGE_STORE: " + backend)
+	}
+	logger.Info("message storage selected", "backend", backend)
+	roomSvc := room.NewService(queries, logger, bus, pool, roomOptions...)
 	userSvc := user.NewService(queries, logger)
-	convSvc := conversation.NewService(queries, logger, bus, pool)
+	convSvc := conversation.NewService(queries, logger, bus, pool, conversationOptions...)
 	inboxSvc := inbox.NewService(bus, logger, queries)
 	hub := ws.NewHub(bus, logger)
 	go hub.Run()
 
-	// queries satisfies ws.MessageStore directly (has CreateMessage + CreateDirectMessage)
 	wsHandler := handlers.NewWSHandler(hub, roomSvc, convSvc, authCfg, logger)
 
 	a := &api.API{

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -103,10 +104,9 @@ func TestDispatch_HandlerError_Continues(t *testing.T) {
 	b := newTestBus()
 	second := make(chan struct{}, 1)
 
-	calls := 0
+	var calls atomic.Int32
 	b.Subscribe("room_join", func(_ context.Context, _ event.Event) error {
-		calls++
-		if calls == 1 {
+		if calls.Add(1) == 1 {
 			return fmt.Errorf("handler error")
 		}
 		second <- struct{}{}
